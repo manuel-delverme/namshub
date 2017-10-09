@@ -13,7 +13,7 @@ class MarketActions(Enum):
     NOOP = 2
 
 class Observations(Enum):
-    PRICE = 1
+    PRICE = 0
     INVESTED = 1
     LIQUID = 2
 
@@ -48,7 +48,7 @@ class BitEnv(gym.Env):
         print(self.S)
         self.sim_time_max = len(self.S)
 
-        self.action_space = spaces.MultiDiscrete([[0, 2]])
+        self.action_space = spaces.Discrete(len([0,1,2]))
         # self.action_space = spaces.Box(
 
         self.observation_space = spaces.Box(
@@ -64,21 +64,20 @@ class BitEnv(gym.Env):
         return [seed]
 
     def _step(self, action):
-        import ipdb; ipdb.set_trace()
+        # import ipdb; ipdb.set_trace()
         assert self.action_space.contains(action)
         # self.np_random.uniform(-self.range, self.rangea)
-        new_price = self.S[self.tim_time]
+        new_price = self.S[self.sim_time]
 
-        market_return = new_price / self.observation[Observations.PRICE]
-        money_pre_step = self.budget
+        market_return = new_price / self.observation[Observations.PRICE.value]
 
-        if action == MarketActions.SELL and self.invested_budget > 0:
+        if action == MarketActions.SELL.value and self.invested_budget > 0:
             self.invested_budget -= 1
             self.liquid_budget += 1
-        elif action == MarketActions.BUY and self.liquid_budget > 0:
+        elif action == MarketActions.BUY.value and self.liquid_budget > 0:
             self.invested_budget += 1
             self.liquid_budget -= 1
-        elif action == MarketActions.NOOP:
+        elif action == MarketActions.NOOP.value:
             pass
 
         reward = self.invested_budget * market_return
