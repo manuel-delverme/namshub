@@ -1,4 +1,5 @@
 import tensorflow as tf
+import sys
 from collections import deque
 from tf_utils import fc
 from BitEnv import BitEnv
@@ -7,7 +8,7 @@ import numpy as np
 
 
 class DQNAgent:
-    def __init__(self, state_size, action_size):
+    def __init__(self, state_size, action_size, name):
         self.state_size = state_size
         self.action_size = action_size
         self.memory = deque(maxlen=2000)
@@ -17,7 +18,8 @@ class DQNAgent:
         self.epsilon_decay = 0.995
         self.learning_rate = 0.001
         self.sess = tf.Session()
-        self.model = self._build_model()
+        with tf.variable_scope(name_or_scope=name):
+            self._build_model()
         self.sess.run(tf.global_variables_initializer())
 
     def _build_model(self):
@@ -59,8 +61,11 @@ class DQNAgent:
         return np.argmax(act_values[0])  # returns action
 
     def train(self, state, q_target, act_target):
-        loss, _ = self.sess.run([self._loss, self._train_op], feed_dict={self._observation:state, self._q_target:q_target, self._action_target:act_target})
+        loss, _ = self.sess.run([self._loss, self._train_op],
+                                feed_dict={self._observation: state, self._q_target: q_target,
+                                           self._action_target: act_target})
         return loss
+
     def replay(self, batch_size):
         loss = 0
         if len(self.memory) < batch_size:
@@ -69,38 +74,87 @@ class DQNAgent:
             # TODO refactor this
             minibatch = random.sample(self.memory, batch_size)
             for state, action, reward, next_state, done in minibatch:
-                target = reward
-                if not done:
+                if done:
+                    target = reward
+                else:
                     target = reward + self.gamma * np.amax(self.get_q(next_state))
-                q_target = self.get_q(state)
-
-                q_target[0][action] = target
-                loss+= self.train(state = [state], q_target=q_target[0], act_target=[action])
+                q_target, = self.get_q(state)
+                q_target[action] = target
+                loss += self.train(state=[state], q_target=q_target, act_target=[action])
             if self.epsilon > self.epsilon_min:
                 self.epsilon *= self.epsilon_decay
-            return loss/batch_size
+            return loss / batch_size
+
 
 MAX_EP = 500
+
+
 def main():
     env = BitEnv()
-    agent = DQNAgent(3,3)
+    agent = DQNAgent(env.observation_space.shape[0], env.action_space.n, "agent")
+    agent_target = DQNAgent(env.observation_space.shape[0], env.action_space.n, "agent_target")
+    stats = {
+        'reward': deque(maxlen=100),
+    }
 
-    t = False
-    s = env.reset()
     for e in range(MAX_EP):
-
-        while not t:
-            q = agent.get_q(state=s)
+        observation = env.reset()
+        done = False
+        total_loss = 0
+        steps = 0
+        while not done:
+            steps += 1
+            q = agent_target.get_q(state=observation)
             if agent.epsilon >= np.random.random():
-                act = np.random.randint(low = 0, high=2)
+                act = np.random.randint(low=0, high=env.action_space.n)
             else:
+                # TODO: use q_target
                 act = np.argmax(q)
-            s1, r, t, _ = env.step(act)
-            agent.remember(state = s, action=act, reward=r, done = t, next_state=s1)
-            s = s1.copy()
-        loss = agent.replay(batch_size=64)
-        print('Iter {}, avg_loss {}'.format(e, loss))
+            s1, r, done, _ = env.step(act)
+            agent.remember(state=observation, action=act, reward=r, done=done, next_state=s1)
+            observation = s1.copy()
+            total_loss += agent.replay(batch_size=64)
+            stats['reward'].append(r)
+            print('episode {}, step {}, state {}, avg_reward {}'.format(
+                e,
+                steps,
+                s1,
+                sum(stats['reward']) / len(stats['reward'])
+            ))
+        local_list = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, scope="agent")
+        target_list = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, scope="target_agent")
 
+        ops = [target_var.assign(local_var) for local_var, target_var in zip(local_list, target_list)]
+        agent.sess.run(ops)
+
+
+def random_run():
+    env = BitEnv()
+    stats = {
+        'reward': deque(maxlen=100),
+    }
+
+    for e in range(MAX_EP):
+        observation = env.reset()
+        done = False
+        total_loss = 0
+        steps = 0
+        while not done:
+            steps += 1
+            act = np.random.randint(low=0, high=env.action_space.n)
+            s1, r, done, _ = env.step(act)
+            observation = s1.copy()
+            stats['reward'].append(r)
+            print('episode {}, step {}, state {}, avg_reward {}'.format(
+                e,
+                steps,
+                s1,
+                sum(stats['reward']) / len(stats['reward'])
+            ))
 
 if __name__ == "__main__":
-    main()
+    random_agent = len(sys.argv) > 1 and sys.argv[1] == "random"
+    if random_agent:
+        random_run()
+    else:
+        main()
