@@ -1,9 +1,14 @@
-import hashlib
+# import hashlib
+import os
 import pickle
 
 
 def disk_cache(f):
     def wrapper(*args, **kwargs):
+        if not os.path.exists("cache/"):
+            print("[DISK_CACHE] creating cache dir")
+            os.makedirs("cache/")
+
         fid = f.__name__
         if args:
             fid += "::".join(str(arg) for arg in args)

@@ -1,0 +1,87 @@
+!_TAG_FILE_FORMAT	2	/extended format; --format=1 will not append ;" to lines/
+!_TAG_FILE_SORTED	1	/0=unsorted, 1=sorted, 2=foldcase/
+!_TAG_PROGRAM_AUTHOR	Darren Hiebert	/dhiebert@users.sourceforge.net/
+!_TAG_PROGRAM_NAME	Exuberant Ctags	//
+!_TAG_PROGRAM_URL	http://ctags.sourceforge.net	/official site/
+!_TAG_PROGRAM_VERSION	5.9~svn20110310	//
+accumulation_distribution	accumulation_distribution.py	/^def accumulation_distribution(close_data, high_data, low_data, volume):$/;"	f
+aroon_down	aroon.py	/^def aroon_down(data, period):$/;"	f
+aroon_up	aroon.py	/^def aroon_up(data, period):$/;"	f
+average_14	ultimate_oscillator.py	/^def average_14(close_data, low_data, period=14):$/;"	f
+average_28	ultimate_oscillator.py	/^def average_28(close_data, low_data, period=28):$/;"	f
+average_7	ultimate_oscillator.py	/^def average_7(close_data, low_data, period=7):$/;"	f
+average_directional_index	directional_indicators.py	/^def average_directional_index(close_data, high_data, low_data, period):$/;"	f
+average_true_range	average_true_range.py	/^def average_true_range(close_data, period):$/;"	f
+average_true_range_percent	average_true_range_percent.py	/^def average_true_range_percent(close_data, period):$/;"	f
+avg_helper	ultimate_oscillator.py	/^def avg_helper(close_data, low_data, period):$/;"	f
+band_width	keltner_bands.py	/^def band_width(high_data, low_data, period):$/;"	f
+bandwidth	bollinger_bands.py	/^def bandwidth(data, period, std=2.0):$/;"	f
+bb_range	bollinger_bands.py	/^def bb_range(data, period, std=2.0):$/;"	f
+buying_pressure	ultimate_oscillator.py	/^def buying_pressure(close_data, low_data):$/;"	f
+calculate_down_moves	directional_indicators.py	/^def calculate_down_moves(low_data):$/;"	f
+calculate_up_moves	directional_indicators.py	/^def calculate_up_moves(high_data):$/;"	f
+center_band	keltner_bands.py	/^def center_band(close_data, high_data, low_data, period):$/;"	f
+center_band	moving_average_envelope.py	/^def center_band(data, period):$/;"	f
+chaikin_money_flow	chaikin_money_flow.py	/^def chaikin_money_flow(close_data, high_data, low_data, volume, period):$/;"	f
+chande_momentum_oscillator	chande_momentum_oscillator.py	/^def chande_momentum_oscillator(close_data, period):$/;"	f
+check_for_input_len_diff	catch_errors.py	/^def check_for_input_len_diff(*args):$/;"	f
+check_for_period_error	catch_errors.py	/^def check_for_period_error(data, period):$/;"	f
+chiku_span	ichimoku_cloud.py	/^def chiku_span(data):$/;"	f
+commodity_channel_index	commodity_channel_index.py	/^def commodity_channel_index(close_data, high_data, low_data, period):$/;"	f
+conversion_base_line_helper	ichimoku_cloud.py	/^def conversion_base_line_helper(data, period):$/;"	f
+detrended_price_oscillator	detrended_price_oscillator.py	/^def detrended_price_oscillator(data, period):$/;"	f
+double_exponential_moving_average	double_exponential_moving_average.py	/^def double_exponential_moving_average(data, period):$/;"	f
+double_smoothed_stochastic	double_smoothed_stochastic.py	/^def double_smoothed_stochastic(data, period):$/;"	f
+exponential_moving_average	exponential_moving_average.py	/^def exponential_moving_average(data, period):$/;"	f
+exponential_moving_average_helper	exponential_moving_average.py	/^def exponential_moving_average_helper(data, period):$/;"	f
+fill_for_noncomputable_vals	function_helper.py	/^def fill_for_noncomputable_vals(input_data, result_data):$/;"	f
+hull_moving_average	hull_moving_average.py	/^def hull_moving_average(data, period):$/;"	f
+kijunsen	ichimoku_cloud.py	/^def kijunsen(data, period=26):$/;"	f
+linear_weighted_moving_average	linear_weighted_moving_average.py	/^def linear_weighted_moving_average(data, period):$/;"	f
+lower_band	keltner_bands.py	/^def lower_band(close_data, high_data, low_data, period):$/;"	f
+lower_band	moving_average_envelope.py	/^def lower_band(data, period, env_percentage):$/;"	f
+lower_bollinger_band	bollinger_bands.py	/^def lower_bollinger_band(data, period, std=2.0):$/;"	f
+lower_price_channel	price_channels.py	/^def lower_price_channel(data, period, lower_percent):$/;"	f
+middle_bollinger_band	bollinger_bands.py	/^def middle_bollinger_band(data, period, std=2.0):$/;"	f
+momentum	momentum.py	/^def momentum(data, period):$/;"	f
+money_flow	money_flow.py	/^def money_flow(close_data, high_data, low_data, volume):$/;"	f
+money_flow_index	money_flow_index.py	/^def money_flow_index(close_data, high_data, low_data, volume, period):$/;"	f
+moving_average_convergence_divergence	moving_average_convergence_divergence.py	/^def moving_average_convergence_divergence(data, short_period, long_period):$/;"	f
+negative_directional_index	directional_indicators.py	/^def negative_directional_index(close_data, high_data, low_data, period):$/;"	f
+negative_directional_movement	directional_indicators.py	/^def negative_directional_movement(high_data, low_data):$/;"	f
+negative_volume_index	volume_index.py	/^def negative_volume_index(close_data, volume):$/;"	f
+on_balance_volume	on_balance_volume.py	/^def on_balance_volume(close_data, volume):$/;"	f
+percent_b	bollinger_bands.py	/^def percent_b(data, period, upper_bb_std=2.0, lower_bb_std=2.0):$/;"	f
+percent_bandwidth	bollinger_bands.py	/^def percent_bandwidth(data, period, std=2.0):$/;"	f
+percent_d	stochastic.py	/^def percent_d(data, period):$/;"	f
+percent_k	stochastic.py	/^def percent_k(data, period):$/;"	f
+positive_directional_index	directional_indicators.py	/^def positive_directional_index(close_data, high_data, low_data, period):$/;"	f
+positive_directional_movement	directional_indicators.py	/^def positive_directional_movement(high_data, low_data):$/;"	f
+positive_volume_index	volume_index.py	/^def positive_volume_index(close_data, volume):$/;"	f
+price_oscillator	price_oscillator.py	/^def price_oscillator(data, short_period, long_period):$/;"	f
+rate_of_change	rate_of_change.py	/^def rate_of_change(data, period):$/;"	f
+relative_strength_index	relative_strength_index.py	/^def relative_strength_index(data, period):$/;"	f
+senkou_a	ichimoku_cloud.py	/^def senkou_a(data):$/;"	f
+senkou_b	ichimoku_cloud.py	/^def senkou_b(data, period=52):$/;"	f
+simple_moving_average	simple_moving_average.py	/^def simple_moving_average(data, period):$/;"	f
+smoothed_moving_average	smoothed_moving_average.py	/^def smoothed_moving_average(data, period):$/;"	f
+standard_deviation	standard_deviation.py	/^def standard_deviation(data, period):$/;"	f
+standard_variance	standard_variance.py	/^def standard_variance(data, period):$/;"	f
+stochrsi	stochrsi.py	/^def stochrsi(data, period):$/;"	f
+tenkansen	ichimoku_cloud.py	/^def tenkansen(data, period=9):$/;"	f
+triangular_moving_average	triangular_moving_average.py	/^def triangular_moving_average(data, period):$/;"	f
+triple_exponential_moving_average	triple_exponential_moving_average.py	/^def triple_exponential_moving_average(data, period):$/;"	f
+true_range	true_range.py	/^def true_range(close_data, period):$/;"	f
+typical_price	typical_price.py	/^def typical_price(close_data, high_data, low_data):$/;"	f
+ultimate_oscillator	ultimate_oscillator.py	/^def ultimate_oscillator(close_data, low_data):$/;"	f
+upper_band	keltner_bands.py	/^def upper_band(close_data, high_data, low_data, period):$/;"	f
+upper_band	moving_average_envelope.py	/^def upper_band(data, period, env_percentage):$/;"	f
+upper_bollinger_band	bollinger_bands.py	/^def upper_bollinger_band(data, period, std_mult=2.0):$/;"	f
+upper_price_channel	price_channels.py	/^def upper_price_channel(data, period, upper_percent):$/;"	f
+vertical_horizontal_filter	vertical_horizontal_filter.py	/^def vertical_horizontal_filter(data, period):$/;"	f
+volatility	volatility.py	/^def volatility(data, period):$/;"	f
+volume_adjusted_moving_average	volume_adjusted_moving_average.py	/^def volume_adjusted_moving_average(close_data, volume, period):$/;"	f
+volume_index_helper	volume_index.py	/^def volume_index_helper(vi, idx, close_data, volume):$/;"	f
+volume_oscillator	volume_oscillator.py	/^def volume_oscillator(volume, short_period, long_period):$/;"	f
+weighted_moving_average	weighted_moving_average.py	/^def weighted_moving_average(data, period):$/;"	f
+williams_percent_r	williams_percent_r.py	/^def williams_percent_r(close_data):$/;"	f

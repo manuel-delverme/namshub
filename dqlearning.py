@@ -1,160 +1,156 @@
 import tensorflow as tf
+from tqdm import tqdm
+import os
+from network import ActorCritic
+from async_agent import A3CGroupAgent
+import datetime
+import six
 import sys
 from collections import deque
 from tf_utils import fc
-from BitEnv import BitEnv
+import BitEnv
 import random
 import numpy as np
 
 
-class DQNAgent:
-    def __init__(self, state_size, action_size, name):
-        self.state_size = state_size
-        self.action_size = action_size
-        self.memory = deque(maxlen=2000)
-        self.gamma = 0.95  # discount rate
-        self.epsilon = 1.0  # exploration rate
-        self.epsilon_min = 0.01
-        self.epsilon_decay = 0.995
-        self.learning_rate = 0.001
-        self.sess = tf.Session()
-        with tf.variable_scope(name_or_scope=name):
-            self._build_model()
-        self.sess.run(tf.global_variables_initializer())
-
-    def _build_model(self):
-        self._observation = tf.placeholder(tf.float32, [None, self.state_size])
-
-        self._action_target = tf.placeholder(tf.int32, [None], name='action_target')
-        self._q_target = tf.placeholder(tf.float32, [None], name='q_value_target')
-
-        with tf.variable_scope('deepq_model'):
-            _hidden = fc(self._observation, h_size=24, name='fc_input', act=tf.nn.relu)
-            for idx in range(2):
-                _hidden = fc(_hidden, h_size=24, name='fc' + str(idx), act=tf.nn.relu)
-            self._q_hat = fc(_hidden, h_size=self.action_size, name='fc', act=None)
-
-        # turn (0..2) into 1-hot encoding
-        _action_one_hot = tf.one_hot(self._action_target, self.action_size, 1.0, 0.0, name='action_target_one_hot')
-
-        # values collected following action_target
-        _q_acted = tf.reduce_sum(self._q_hat * _action_one_hot, reduction_indices=1, name='q_hat')
-        _delta = self._q_target - _q_acted
-
-        self._loss = tf.reduce_mean(tf.square(_delta))
-        self._train_op = tf.train.AdamOptimizer(learning_rate=self.learning_rate).minimize(self._loss)
-
-    def get_q(self, state):
-
-        if np.ndim(state) < 2:
-            state = [state]
-
-        return self.sess.run(self._q_hat, feed_dict={self._observation: state})
-
-    def remember(self, state, action, reward, next_state, done):
-        self.memory.append((state, action, reward, next_state, done))
-
-    def act(self, state):
-        if np.random.rand() <= self.epsilon:
-            return random.randrange(self.action_size)
-        act_values = self.get_q(state)
-        return np.argmax(act_values[0])  # returns action
-
-    def train(self, state, q_target, act_target):
-        loss, _ = self.sess.run([self._loss, self._train_op],
-                                feed_dict={self._observation: state, self._q_target: q_target,
-                                           self._action_target: act_target})
-        return loss
-
-    def replay(self, batch_size):
-        loss = 0
-        if len(self.memory) < batch_size:
-            return 0
-        else:
-            # TODO refactor this
-            minibatch = random.sample(self.memory, batch_size)
-            for state, action, reward, next_state, done in minibatch:
-                if done:
-                    target = reward
-                else:
-                    target = reward + self.gamma * np.amax(self.get_q(next_state))
-                q_target, = self.get_q(state)
-                q_target[action] = target
-                loss += self.train(state=[state], q_target=q_target, act_target=[action])
-            if self.epsilon > self.epsilon_min:
-                self.epsilon *= self.epsilon_decay
-            return loss / batch_size
-
-
-MAX_EP = 500
-
-
 def main():
-    env = BitEnv()
-    agent = DQNAgent(env.observation_space.shape[0], env.action_space.n, "agent")
-    agent_target = DQNAgent(env.observation_space.shape[0], env.action_space.n, "agent_target")
+    DISCOUNT_FACTOR = 0.99
+    # DEVICE = '/gpu:0'
+    DEVICE = '/cpu:0'
+
+    SAVE_PERIOD = 20000
+    SUMMARY_PERIOD = 100
+
+    LEARNING_RATE = 0.00025
+    DECAY = 0.99
+    GRAD_CLIP = 0.1
+    ENTROPY_BETA = 0.01
+
+    NUM_THREADS = 1
+    AGENT_PER_THREADS = 1
+    UNROLL_STEP = 5
+    MAX_ITERATION = 1000000
+    RANDOM_SEED = 185
+
+    env = BitEnv.BitEnv()
+    # Initialize Seed
+    tf.set_random_seed(RANDOM_SEED)
+    np.random.seed(RANDOM_SEED)
+    tf.reset_default_graph()
+
+    action_space_size = env.action_space.n
+    # define actor critic networks and environments
+    global_step = tf.Variable(0, name="global_step", trainable=False)
+    learning_rate = tf.train.polynomial_decay(LEARNING_RATE, global_step, MAX_ITERATION // 2, LEARNING_RATE * 0.1)
+
+    master_ac = ActorCritic(nA=action_space_size, state_shape=env.observation_space.shape,  device_name=DEVICE,
+                            learning_rate=learning_rate, decay=DECAY, grad_clip=GRAD_CLIP, entropy_beta=ENTROPY_BETA)
+    agents_group = []
+    for i in range(NUM_THREADS):
+        group_envs = [BitEnv.BitEnv() for _ in range(AGENT_PER_THREADS)]
+        ac = ActorCritic(nA=action_space_size, state_shape=env.observation_space.shape, master=master_ac,
+                         device_name=DEVICE, scope_name='Thread%02d' % i, learning_rate=learning_rate, decay=DECAY,
+                         grad_clip=GRAD_CLIP, entropy_beta=ENTROPY_BETA)
+        agentGroup = A3CGroupAgent(group_envs, ac, unroll_step=UNROLL_STEP, discount_factor=DISCOUNT_FACTOR, seed=i)
+        agents_group.append(agentGroup)
+
+    queue = tf.FIFOQueue(capacity=NUM_THREADS * 10, dtypes=[tf.float32, tf.float32, tf.float32], )
+
+    train_ops = [g_agent.enqueue_op(queue) for g_agent in agents_group]
+    qr = tf.train.QueueRunner(queue, train_ops)
+    tf.train.queue_runner.add_queue_runner(qr)
+    loss = queue.dequeue()
+
+    # Miscellaneous(init op, summaries, etc.)
+    increase_step = global_step.assign(global_step + 1)
+    init_op = [tf.global_variables_initializer(), tf.local_variables_initializer()]
+
+    def _train_info():
+        _total_eps = sum([g_agent.num_episodes() for g_agent in agents_group])
+        _avg_r = sum([g_agent.reward_info()[0] for g_agent in agents_group]) / len(agents_group)
+        _max_r = max([g_agent.reward_info()[1] for g_agent in agents_group])
+        return _total_eps, _avg_r, _max_r
+
+    train_info = tf.py_func(_train_info, [], [tf.int64, tf.float64, tf.float64], stateful=True)
+    pl, el, vl = loss
+    total_eps, avg_r, max_r = train_info
+
+    tf.summary.scalar('learning_rate', learning_rate)
+    tf.summary.scalar('policy_loss', pl)
+    tf.summary.scalar('entropy_loss', el)
+    tf.summary.scalar('value_loss', vl)
+    tf.summary.scalar('total_episodes', total_eps)
+    tf.summary.scalar('average_rewards', avg_r)
+    tf.summary.scalar('maximum_rewards', max_r)
+    summary_op = tf.summary.merge_all()
+    # config_summary = tf.summary.text('TrainConfig', tf.convert_to_tensor(config.as_matrix()), collections=[])
+
+    # saver and sessions
+    saver = tf.train.Saver(var_list=master_ac.train_vars, max_to_keep=3)
+
+    sess = tf.Session()
+    sess.graph.finalize()
+
+    sess.run(init_op)
+    master_ac.initialize(sess)
+    for agent in agents_group:
+        agent.master_actor_critic.initialize(sess)
+    print('Initialize Complete...')
+
+    LOG_DIR = "log/"
+    summary_writer = tf.summary.FileWriter(LOG_DIR, sess.graph)
+    summary_writer_eps = tf.summary.FileWriter(os.path.join(LOG_DIR, 'per-eps'))
+    # summary_writer.add_summary(sess.run(config_summary))
+
+    coord = tf.train.Coordinator()
+    threads = tf.train.start_queue_runners(sess=sess, coord=coord)
+    try:
+        for step in tqdm(range(MAX_ITERATION)):
+            if coord.should_stop():
+                break
+
+            (pl, el, vl), summary_str, (total_eps, avg_r, max_r), _ = sess.run(
+                [loss, summary_op, train_info, increase_step])
+            if step % SUMMARY_PERIOD == 0:
+                summary_writer.add_summary(summary_str, step)
+                summary_writer_eps.add_summary(summary_str, total_eps)
+                tqdm.write('step(%7d) policy_loss:%1.5f,entropy_loss:%1.5f,value_loss:%1.5f, te:%5d avg_r:%2.1f '
+                           'max_r:%2.1f' % (step, pl, el, vl, total_eps, avg_r, max_r))
+            if (step + 1) % SAVE_PERIOD == 0:
+                saver.save(sess, os.path.join(LOG_DIR, '/model.ckpt'), global_step=step + 1)
+    except Exception as e:
+        coord.request_stop(e)
+    finally:
+        coord.request_stop()
+        coord.join(threads)
+
+        saver.save(sess, LOG_DIR + '/last.ckpt')
+        sess.close()
+        # queue.close() #where should it go?
+    # -----------------END----------------
+
+    """
     stats = {
-        'reward': deque(maxlen=100),
+        'reward': deque(maxlen=env.sim_time_max),
+        'acts': [0, 0, 0],
     }
-
-    for e in range(MAX_EP):
-        observation = env.reset()
-        done = False
-        total_loss = 0
-        steps = 0
-        while not done:
-            steps += 1
-            q = agent_target.get_q(state=observation)
-            if agent.epsilon >= np.random.random():
-                act = np.random.randint(low=0, high=env.action_space.n)
-            else:
-                # TODO: use q_target
-                act = np.argmax(q)
-            s1, r, done, _ = env.step(act)
-            agent.remember(state=observation, action=act, reward=r, done=done, next_state=s1)
-            observation = s1.copy()
-            total_loss += agent.replay(batch_size=64)
-            stats['reward'].append(r)
-            print('episode {}, step {}, state {}, avg_reward {}'.format(
-                e,
-                steps,
-                s1,
-                sum(stats['reward']) / len(stats['reward'])
-            ))
-        local_list = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, scope="agent")
-        target_list = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, scope="target_agent")
-
-        ops = [target_var.assign(local_var) for local_var, target_var in zip(local_list, target_list)]
-        agent.sess.run(ops)
-
-
-def random_run():
-    env = BitEnv()
-    stats = {
-        'reward': deque(maxlen=100),
+    act = BitEnv.MarketActions.BUY
+    stats['acts'][act] += 1
+    stats['reward'].append(r)
+    ep_stats = {
+        'steps': steps,
+        'avg_reward': np.array(stats['reward']).mean(),
+        'sell': stats['acts'][0],
+        'buy': stats['acts'][1],
+        'noop': stats['acts'][2],
+        'liquid': env.liquid_budget,
+        'invested': env.invested_budget * env.observation[BitEnv.Observations.PRICE],
+        'epsilon': agent.epsilon,
     }
+    stats['reward'].clear()
+    stats['acts'] = [0, 0, 0]
+    """
 
-    for e in range(MAX_EP):
-        observation = env.reset()
-        done = False
-        total_loss = 0
-        steps = 0
-        while not done:
-            steps += 1
-            act = np.random.randint(low=0, high=env.action_space.n)
-            s1, r, done, _ = env.step(act)
-            observation = s1.copy()
-            stats['reward'].append(r)
-            print('episode {}, step {}, state {}, avg_reward {}'.format(
-                e,
-                steps,
-                s1,
-                sum(stats['reward']) / len(stats['reward'])
-            ))
 
 if __name__ == "__main__":
-    random_agent = len(sys.argv) > 1 and sys.argv[1] == "random"
-    if random_agent:
-        random_run()
-    else:
-        main()
+    main()
