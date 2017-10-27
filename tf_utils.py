@@ -1,14 +1,64 @@
-import os
-
-import numpy as np
 import tensorflow as tf
+import os
+import numpy as np
 
 
-def _clip_grad(loss, vars, clip=50):
-    grads = tf.gradients(loss, vars)
-    # assert all(grads)  # make sure that there are no none in gradients
-    g, _ = tf.clip_by_global_norm(grads, clip)
-    return zip(g, vars)
+def build_z(v_min, v_max, n_atoms):
+    dz = (v_max - v_min) / (n_atoms - 1)
+    z = tf.range(v_min, v_max + dz / 2, dz, dtype=tf.float32, name='z')
+    return z, dz
+
+
+def p_to_q(p_dist, v_min, v_max, n_atoms):
+    z, _ = build_z(v_min, v_max, n_atoms)
+    return tf.tensordot(p_dist, z, axes=[[-1], [-1]])
+
+
+def set_global_seed(seed=1234):
+    np.random.seed(seed)
+    tf.set_random_seed(seed)
+    pass
+
+
+def get_trainable_variables(scope):
+    return tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, scope=scope)
+
+
+def transfer_learning(to_tensors, from_tensors, tau=1.):
+    update_op = []
+    for from_t, to_t in zip(sorted(from_tensors, key=lambda v: v.name),
+                            sorted(to_tensors, key=lambda v: v.name)):
+        update_op.append(
+            # C <- C * tau + C_old * (1-tau)
+            tf.assign(to_t, tf.multiply(from_t, tau) + tf.multiply(to_t, 1. - tau))
+        )
+    return update_op #tf.group(*update_op)
+
+
+def get_pa(p, acts, batch_size):
+    cat_idx = tf.transpose(
+        tf.reshape(tf.concat([tf.range(batch_size), acts], axis=0), shape=[2, batch_size]))
+    p_target = tf.gather_nd(params=p, indices=cat_idx)
+    return p_target
+
+
+def load_model(sess, load_path, var_list=None):
+    ckpt = tf.train.load_checkpoint(ckpt_dir_or_file=load_path)
+    saver = tf.train.Saver(var_list=var_list)
+    try:
+        saver.restore(sess=sess, save_path=ckpt)
+    except Exception as e:
+        tf.logging.error(e)
+
+
+def save(sess, save_path, var_list=None):
+    os.makedirs(save_path, exist_ok=True)
+    saver = tf.train.Saver(var_list=var_list)
+    try:
+        saver.save(sess=sess, save_path=os.path.join(save_path, 'model.ckpt'),
+                   write_meta_graph=False)
+    except Exception as e:
+        tf.logging.error(e)
 
 
 def fc(x, h_size, name, act=None, std=0.1):
@@ -20,62 +70,5 @@ def fc(x, h_size, name, act=None, std=0.1):
         if act is not None:
             z = act(z)
         return z
-
-
-class GaussianPD(object):
-    def __init__(self, mu, logstd):
-        self.mu = mu
-        self.std = tf.exp(logstd)
-        self.logstd = logstd
-        self.act_dim = tf.to_float(tf.shape(mu)[-1])
-
-    def neglogp(self, action):
-        return 0.5 * tf.reduce_sum(tf.square((action - self.mu) / self.std), axis=-1) \
-               + 0.5 * np.log(2.0 * np.pi) * tf.to_float(tf.shape(action)[-1]) \
-               + tf.reduce_sum(self.logstd, axis=-1)
-
-    def entropy(self):
-        return tf.reduce_sum(self.logstd + .5 * np.log(2.0 * np.pi * np.e), axis=-1)
-
-    def kl(self, pi_other):
-        return tf.reduce_sum(
-            pi_other.logstd - self.logstd + (tf.square(self.std) + tf.square(self.mu - pi_other.mu)) / (
-                2.0 * tf.square(pi_other.std)) - 0.5, axis=-1)
-
-    def logp(self, action):
-        return -self.neglogp(action)
-
-    def sample(self):
-        return self.mu + tf.random_normal(tf.shape(self.mu)) * self.std
-
-
-def get_params(scope):
-    return tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, scope=scope)
-
-
-def _save(saver, sess, log_dir):
-    try:
-        saver.save(sess=sess, save_path=os.path.join(log_dir, 'model.ckpt'))
-    except Exception as e:
-        tf.logging.error(e)
-        raise e
-
-
-def _load(saver, sess, log_dir):
-    try:
-        ckpt = tf.train.latest_checkpoint(log_dir)
-        saver.restore(sess=sess, save_path=ckpt)
-    except Exception as e:
-        tf.logging.error(e)
-        raise e
-
-def set_global_seed(seed = 10):
-
-    tf.set_random_seed(seed)
-    import numpy as np
-    import random
-    np.random.seed(seed)
-    random.seed(seed)
-
 
 

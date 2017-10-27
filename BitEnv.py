@@ -1,5 +1,5 @@
 import gym
-from utils import disk_cache
+from disk_utils import disk_cache
 import random
 from gym import spaces
 from gym.utils import seeding
@@ -19,6 +19,7 @@ import technical_indicators.money_flow
 import technical_indicators.money_flow_index
 
 import technical_indicators.moving_average_convergence_divergence
+import queue
 # import volume_oscillator
 
 # DEPRECATED
@@ -77,6 +78,7 @@ class Observations(object):
 
 class BitEnv(gym.Env):
     def __init__(self):
+        self.ledger = []
         self.range = 1000  # +/- value the randomly select number can be between
         self.bounds = 5000  # Action space bounds
 
@@ -98,10 +100,15 @@ class BitEnv(gym.Env):
         # self.action_space = spaces.Box(
 
         self._seed()
+        self.history = queue.deque(maxlen=100)
+        first_observation = self._preprocess_state()
+        for _ in range(100):
+            self.history.append(first_observation.copy())
         self.observation = self._reset()
+        obs_dim = self.observation.shape[0]
         self.observation_space = spaces.Box(
-            low=np.array([-np.inf] * len(self.observation)),
-            high=np.array([np.inf] * len(self.observation)),
+            low=np.array([-np.inf] * obs_dim),
+            high=np.array([np.inf] * obs_dim),
         )
 
     @disk_cache
@@ -113,37 +120,24 @@ class BitEnv(gym.Env):
                 S.append((price, something))
         return np.array(S)
 
-    def init_brownian_motion(self):
-        T = 2
-        mu = 0.1
-        sigma = 0.01
-        S0 = 20
-        dt = 0.01
-        N = round(T / dt)
-        t = np.linspace(0, T, N)
-        W = np.random.standard_normal(size=N)
-        W = np.cumsum(W) * np.sqrt(dt)  ### standard brownian motion ###
-        # X = (mu-0.5*sigma**2)*t + sigma*W
-        # self.S = S0*np.exp(X) ### geometric brownian motion ###
-        self.S = S0 * np.exp(W)  ### geometric brownian motion ###
-
     def _seed(self, seed=None):
         self.np_random, seed = seeding.np_random(seed)
         return [seed]
 
     def _step(self, action):
         assert self.action_space.contains(action)
-        self.observation = self.preprocess_state()
+        self.observation = self._preprocess_state()
 
-        new_price = self.observation[Observations.PRICE]
+        new_price = self.S[self.sim_time][0]
         transaction_fee = self.bitcoin_fraction * (0.16 / 100)
 
         penalty = 0
         if action == MarketActions.SELL:
-            if self.invested_budget > VERY_SMALL_NUMBER and self.liquid_budget > transaction_fee:
+            if self.invested_budget > self.bitcoin_fraction and self.liquid_budget > transaction_fee:
                 self.invested_budget -= self.bitcoin_fraction
                 self.liquid_budget += new_price * self.bitcoin_fraction
                 self.liquid_budget -= transaction_fee
+                self.ledger.append(new_price)
             else:
                 penalty += 1
 
@@ -152,25 +146,32 @@ class BitEnv(gym.Env):
                 self.invested_budget += self.bitcoin_fraction
                 self.liquid_budget -= new_price * self.bitcoin_fraction
                 self.liquid_budget -= transaction_fee
+                self.ledger.append(new_price)
             else:
                 penalty += 1
 
         elif action == MarketActions.NOOP:
             pass
 
-        normalized_initial_investment = (self.initial_budget + 0) * (new_price / self.initial_price)
-        agent_value = (self.invested_budget * new_price + self.liquid_budget)
-        reward = agent_value - normalized_initial_investment - penalty
+        # normalized_initial_investment = (self.initial_budget + 0) * (new_price / self.initial_price)
+        # agent_value = (self.invested_budget * new_price + self.liquid_budget)
+
+
+        # simone style
+
+        # whitehead style
+        agent_value = (self.liquid_budget - self.initial_budget) / self.initial_budget
+        reward = agent_value - penalty
 
         self.sim_time += 1
         done = self.sim_time == self.sim_time_max or self.sim_time == len(self.S)
 
         assert self.sim_time <= self.sim_time_max
         assert self.sim_time < len(self.S)
-        assert self.invested_budget > -VERY_SMALL_NUMBER
+        assert self.invested_budget >= 0
         # print(self.liquid_budget)
-        if self.liquid_budget < -VERY_SMALL_NUMBER:
-            print(self.liquid_budget, "< -VERY_SMALL_NUMBER")
+        if self.liquid_budget < 0:
+            print(self.liquid_budget, "< 0")
             raise AssertionError()
 
         return self.observation, reward, done, {"time_step": self.sim_time}
@@ -182,13 +183,14 @@ class BitEnv(gym.Env):
         self.initial_price = self.S[self.sim_time][0]
         # sell everything from last run and start anew
         self.initial_budget = self.liquid_budget + self.invested_budget * self.initial_price
-        return self.preprocess_state()
+        return self._preprocess_state()
 
-    def preprocess_state(self):
+    def _preprocess_state(self):
         PERIOD = 10
 
         new_price, some_number = tuple(self.S[self.sim_time])
         state = [new_price, some_number, self.invested_budget, self.liquid_budget]
+        """
 
         period = min(PERIOD, self.sim_time + 1 + 1)
         start = max(self.sim_time - period, 0)
@@ -206,6 +208,7 @@ class BitEnv(gym.Env):
             else:
                 value = indicator(price_history, period=period)
             state.append(value[-1])
+        """
 
         # technical_indicators.moving_average_convergence_divergence
         # technical_indicators.exponential_moving_average
@@ -219,7 +222,28 @@ class BitEnv(gym.Env):
         # technical_indicators.momentum
         # technical_indicators.money_flow
         # technical_indicators.money_flow_index
-        return np.array(state)
+        self.history.append(np.array(state))
+        return np.array(self.history).flatten()
+
+    def print_stats(self, epsilon=None):
+        new_price, some_number = tuple(self.S[self.sim_time])
+
+        normalized_initial_investment = (self.initial_budget + 0) * (new_price / self.initial_price)
+        agent_value = (self.invested_budget * new_price + self.liquid_budget)
+
+        delta_cash = self.invested_budget * new_price + self.liquid_budget - self.initial_budget
+        print(
+            "progress:", round(self.sim_time / float(len(self.S)), 6),
+            "epsilon", round(epsilon, 2),
+            "invested", round(self.invested_budget, 2),
+            "liquid", round(self.liquid_budget, 2),
+            "new_price", round(new_price, 2),
+            "episode_profit", round(delta_cash, 2),
+            "gain_over_market", round(agent_value - normalized_initial_investment, 2),
+            "sordi", round(delta_cash + self.initial_budget, 2),
+            "hold", round((1000. / self.S[0][0]) * new_price, 2) - round(delta_cash + self.initial_budget, 2),
+            sep="\t"
+        )
 
 
 def test_BitEnv():
