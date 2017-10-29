@@ -5,61 +5,11 @@ from gym import spaces
 from gym.utils import seeding
 import numpy as np
 
-import technical_indicators.bollinger_bands
-import technical_indicators.exponential_moving_average
-import technical_indicators.simple_moving_average
-import technical_indicators.smoothed_moving_average
-import technical_indicators.stochrsi
-import technical_indicators.relative_strength_index
-import technical_indicators.on_balance_volume
-import technical_indicators.directional_indicators
-import technical_indicators.ichimoku_cloud
-import technical_indicators.momentum
-import technical_indicators.money_flow
-import technical_indicators.money_flow_index
-
-import technical_indicators.moving_average_convergence_divergence
 import queue
-# import volume_oscillator
-
-# DEPRECATED
-
-# import keltner_bands
-# import technical_indicators.accumulation_distribution
-# import technical_indicators.aroon
-# import technical_indicators.average_true_range
-# import technical_indicators.average_true_range_percent
-
-# import double_exponential_moving_average
-# import hull_moving_average
-# import volume_adjusted_moving_average
-# import weighted_moving_average
-# import linear_weighted_moving_average
-# import moving_average_envelope
-# import triangular_moving_average
-# import triple_exponential_moving_average
-
-# import price_channels
-# import price_oscillator
-# import rate_of_change
-# import standard_deviation
-# import standard_variance
-# import stochastic
-# import true_range
-# import typical_price
-# import ultimate_oscillator
-# import vertical_horizontal_filter
-# import volatility
-# import volume_index
-# import volume_oscillator
-# import williams_percent_r
-
-# import chaikin_money_flow
-# import chande_momentum_oscillator
-# import commodity_channel_index
-# import detrended_price_oscillator
-# import double_smoothed_stochastic
-
+import sys
+import tqdm
+import datetime
+import time
 
 VERY_SMALL_NUMBER = 0.01
 
@@ -71,13 +21,92 @@ class MarketActions(object):
 
 
 class Observations(object):
-    PRICE = 0
-    INVESTED = 1
-    LIQUID = 2
+    BUY = 0
+    SELL = 1
+    VOLUME = 2
+    INVESTED = 3
+    LIQUID = 4
+
+
+class MarketData(object):
+    def __init__(self, exchange="coinbase"):
+        if exchange == "coinbase":
+            import gdax
+            public_client = gdax.PublicClient()
+
+            def get_data_fn(epoch):
+                tickers = None
+                for sleep_time in [0, 1, 10, 20, 40]:
+                    time.sleep(sleep_time)
+                    tickers = public_client.get_product_ticker(product_id='BTC-USD')
+                    self.minimum_trade = tickers['size']
+                    buy_price = tickers['ask']
+                    sell_price = tickers['bid']
+                    volume = tickers['volume']
+                    return buy_price, sell_price, volume
+                else:
+                    raise Exception(tickers['error'])
+
+            initial_time = datetime.datetime.utcfromtimestamp(int(public_client.get_time()['epoch']))
+        else:
+            import krakenex
+            pair = 'XXBTZUSD'
+            # NOTE: for the (default) 1-minute granularity, the API seems to provide data up to 12 hours old only!
+            endpoint = krakenex.API()
+            resp = endpoint.query_public("Time")["result"]["unixtime"]
+            initial_time = datetime.datetime.utcfromtimestamp(int(resp))
+
+            def get_data_fn(epoc):
+                since = epoc - datetime.timedelta(hours=11)
+                response = endpoint.query_public('OHLC', req={
+                    'pair': pair, 'since': since
+                })
+                return response
+
+        self.get_data = get_data_fn
+        self.initial_time = initial_time
+        self.last_query_time = datetime.datetime.utcnow() - datetime.timedelta(hours=12)
+        self.delay = datetime.timedelta(seconds=60)
+        self.S = {}
+
+    def __len__(self):
+        return sys.maxsize
+
+    def __getitem__(self, time_idx):
+        time_idx = self.initial_time + datetime.timedelta(minutes=time_idx)
+        try:
+            item = self.S[time_idx]
+        except KeyError:
+            since = datetime.datetime.utcnow() - datetime.timedelta(hours=12)
+
+            time_since_last_query = datetime.datetime.utcnow() - self.last_query_time
+            time_to_wait = self.delay - time_since_last_query
+            if time_to_wait > datetime.timedelta(seconds=0):
+                print("sleeping", time_to_wait.seconds, "+1 sec")
+                time.sleep(time_to_wait + 1)
+
+            resp = self.get_data(time_idx)
+            self.S[time_idx] = np.array(tuple(map(float, resp)))
+            # for result in response:
+            #    tick_time, open, high, low, close, vwap, volume, count = result
+            #    tick_time = datetime.datetime.utcfromtimestamp(tick_time)
+            #    if tick_time not in self.S:
+            #         self.S[tick_time] = np.array((open, high, low, close, vwap, volume, count))
+            #    else:
+            #        # TODO: average?, vote?
+            #        self.S[tick_time] += np.array((open, high, low, close, vwap, volume, count))
+            #         # datetime.datetime.fromtimestamp(time).strftime('%d/%m/%Y %H:%M:%S %Z'),
+            item = self.S[time_idx]
+        return item
 
 
 class BitEnv(gym.Env):
     def __init__(self):
+        self.taken_actions = {
+            MarketActions.SELL: 0,
+            MarketActions.BUY: 0,
+            MarketActions.NOOP: 0,
+        }
         self.ledger = []
         self.range = 1000  # +/- value the randomly select number can be between
         self.bounds = 5000  # Action space bounds
@@ -94,7 +123,9 @@ class BitEnv(gym.Env):
 
         print("init")
         # self.init_brownian_motion()
-        self.S = self.init_coinbase()
+        # self.S = self.init_coinbase()
+        self.S = MarketData()
+        self.progress_bar = tqdm.tqdm(total=len(self.S), unit="samples")
 
         self.action_space = spaces.Discrete(len([0, 1, 2]))
         # self.action_space = spaces.Box(
@@ -128,10 +159,12 @@ class BitEnv(gym.Env):
         assert self.action_space.contains(action)
         self.observation = self._preprocess_state()
 
-        new_price = self.S[self.sim_time][0]
+        new_price = self.S[self.sim_time][Observations.SELL]
         transaction_fee = self.bitcoin_fraction * (0.16 / 100)
 
         penalty = 0
+        self.taken_actions[action] += 1
+        can_buy_btc = self.liquid_budget > (new_price * self.bitcoin_fraction + transaction_fee)
         if action == MarketActions.SELL:
             if self.invested_budget > self.bitcoin_fraction and self.liquid_budget > transaction_fee:
                 self.invested_budget -= self.bitcoin_fraction
@@ -142,7 +175,7 @@ class BitEnv(gym.Env):
                 penalty += 1
 
         elif action == MarketActions.BUY:
-            if self.liquid_budget > (new_price * self.bitcoin_fraction + transaction_fee):
+            if can_buy_btc:
                 self.invested_budget += self.bitcoin_fraction
                 self.liquid_budget -= new_price * self.bitcoin_fraction
                 self.liquid_budget -= transaction_fee
@@ -164,7 +197,9 @@ class BitEnv(gym.Env):
         reward = agent_value - penalty
 
         self.sim_time += 1
-        done = self.sim_time == self.sim_time_max or self.sim_time == len(self.S)
+        self.progress_bar.update(1)
+
+        done = self.sim_time == self.sim_time_max or self.sim_time == len(self.S) or (not can_buy_btc)
 
         assert self.sim_time <= self.sim_time_max
         assert self.sim_time < len(self.S)
@@ -180,7 +215,7 @@ class BitEnv(gym.Env):
         # self.sim_time -= int(self.sim_time_max / 10)  # TODO try re-experience a 1th of the last run
         self.sim_time_max = self.sim_time + self.sim_episode_length
 
-        self.initial_price = self.S[self.sim_time][0]
+        self.initial_price = self.S[self.sim_time][Observations.SELL]
         # sell everything from last run and start anew
         self.initial_budget = self.liquid_budget + self.invested_budget * self.initial_price
         return self._preprocess_state()
@@ -188,8 +223,8 @@ class BitEnv(gym.Env):
     def _preprocess_state(self):
         PERIOD = 10
 
-        new_price, some_number = tuple(self.S[self.sim_time])
-        state = [new_price, some_number, self.invested_budget, self.liquid_budget]
+        buy, sell, volume = tuple(self.S[self.sim_time])
+        state = [buy, sell, volume, self.invested_budget, self.liquid_budget]
         """
 
         period = min(PERIOD, self.sim_time + 1 + 1)
@@ -225,7 +260,7 @@ class BitEnv(gym.Env):
         self.history.append(np.array(state))
         return np.array(self.history).flatten()
 
-    def print_stats(self, epsilon=None):
+    def print_stats(self, epsilon=None, extra=""):
         new_price, some_number = tuple(self.S[self.sim_time])
 
         normalized_initial_investment = (self.initial_budget + 0) * (new_price / self.initial_price)
@@ -233,17 +268,25 @@ class BitEnv(gym.Env):
 
         delta_cash = self.invested_budget * new_price + self.liquid_budget - self.initial_budget
         print(
-            "progress:", round(self.sim_time / float(len(self.S)), 6),
+            # "progress:", round(self.sim_time / float(len(self.S)), 6),
             "epsilon", round(epsilon, 2),
-            "invested", round(self.invested_budget, 2),
-            "liquid", round(self.liquid_budget, 2),
-            "new_price", round(new_price, 2),
-            "episode_profit", round(delta_cash, 2),
-            "gain_over_market", round(agent_value - normalized_initial_investment, 2),
+            "btc", round(self.invested_budget, 2),
+            "$$", round(self.liquid_budget, 2),
+            "price", round(new_price, 2),
+            "ep_prft", round(delta_cash, 2),
+            # "gain_over_market", round(agent_value - normalized_initial_investment, 2),
             "sordi", round(delta_cash + self.initial_budget, 2),
             "hold", round((1000. / self.S[0][0]) * new_price, 2) - round(delta_cash + self.initial_budget, 2),
-            sep="\t"
+            self.taken_actions,
+            extra,
+            sep=" ",
+            file=sys.stderr,
         )
+        self.taken_actions = {
+            MarketActions.SELL: 0,
+            MarketActions.BUY: 0,
+            MarketActions.NOOP: 0,
+        }
 
 
 def test_BitEnv():
@@ -255,7 +298,8 @@ def test_BitEnv():
         step += 1
         act = random.randint(0, 2)
         s, r, done, info = env.step(act)
-        print("step", step, s, r)
+        print("step", step, s[:5], r)
+        print("step", step, s[5:], r)
 
 
 if __name__ == "__main__":
