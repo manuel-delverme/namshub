@@ -170,7 +170,6 @@ class BitEnv(gym.Env):
         return [seed]
 
     def _step(self, action):
-        print("action", action)
         assert self.action_space.contains(action)
         self.observation = self._preprocess_state()
 
