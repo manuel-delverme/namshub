@@ -28,6 +28,18 @@ class Observations(object):
     LIQUID = 4
 
 
+class CachedMarketData(object):
+    def __init__(self, original_dataset):
+        self.S = original_dataset
+
+    def __len__(self):
+        return len(self.S)
+
+    def __getitem__(self, time_idx):
+        price, volume = self.S[time_idx]
+        return price * 1.0001, price, volume
+
+
 class MarketData(object):
     def __init__(self, exchange="coinbase"):
         if exchange == "coinbase":
@@ -101,7 +113,7 @@ class MarketData(object):
 
 
 class BitEnv(gym.Env):
-    def __init__(self):
+    def __init__(self, use_historic_data=False):
         self.taken_actions = {
             MarketActions.SELL: 0,
             MarketActions.BUY: 0,
@@ -122,9 +134,11 @@ class BitEnv(gym.Env):
         self.invested_budget = 0
 
         print("init")
-        # self.init_brownian_motion()
-        # self.S = self.init_coinbase()
-        self.S = MarketData()
+        if use_historic_data:
+            self.S = CachedMarketData(self.init_coinbase())
+        else:
+            self.S = MarketData()
+
         self.progress_bar = tqdm.tqdm(total=len(self.S), unit="samples")
 
         self.action_space = spaces.Discrete(len([0, 1, 2]))
@@ -156,6 +170,7 @@ class BitEnv(gym.Env):
         return [seed]
 
     def _step(self, action):
+        print("action", action)
         assert self.action_space.contains(action)
         self.observation = self._preprocess_state()
 
@@ -211,6 +226,9 @@ class BitEnv(gym.Env):
 
         return self.observation, reward, done, {"time_step": self.sim_time}
 
+    def _close(self):
+        print("LOL BYE")
+
     def _reset(self):
         # self.sim_time -= int(self.sim_time_max / 10)  # TODO try re-experience a 1th of the last run
         self.sim_time_max = self.sim_time + self.sim_episode_length
@@ -261,22 +279,22 @@ class BitEnv(gym.Env):
         return np.array(self.history).flatten()
 
     def print_stats(self, epsilon=None, extra=""):
-        new_price, some_number = tuple(self.S[self.sim_time])
+        buy, sell, volume = tuple(self.S[self.sim_time])
 
-        normalized_initial_investment = (self.initial_budget + 0) * (new_price / self.initial_price)
-        agent_value = (self.invested_budget * new_price + self.liquid_budget)
+        normalized_initial_investment = (self.initial_budget + 0) * (sell / self.initial_price)
+        agent_value = (self.invested_budget * sell + self.liquid_budget)
 
-        delta_cash = self.invested_budget * new_price + self.liquid_budget - self.initial_budget
+        delta_cash = self.invested_budget * sell + self.liquid_budget - self.initial_budget
         print(
             # "progress:", round(self.sim_time / float(len(self.S)), 6),
-            "epsilon", round(epsilon, 2),
+            # "epsilon", round(epsilon, 2),
             "btc", round(self.invested_budget, 2),
             "$$", round(self.liquid_budget, 2),
-            "price", round(new_price, 2),
+            "price", round(sell, 2),
             "ep_prft", round(delta_cash, 2),
             # "gain_over_market", round(agent_value - normalized_initial_investment, 2),
             "sordi", round(delta_cash + self.initial_budget, 2),
-            "hold", round((1000. / self.S[0][0]) * new_price, 2) - round(delta_cash + self.initial_budget, 2),
+            "hold", round((1000. / self.S[0][0]) * sell, 2) - round(delta_cash + self.initial_budget, 2),
             self.taken_actions,
             extra,
             sep=" ",

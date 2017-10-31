@@ -11,7 +11,7 @@ class LinearSchedule(object):
 
 import numpy as np
 import matplotlib.pyplot as plt
-from tf_utils import build_z
+from oldtf_utils import build_z
 
 
 class PlotMachine(object):

@@ -1,4 +1,5 @@
 import tensorflow as tf
+from scipy.signal import lfilter
 import os
 import numpy as np
 
@@ -32,7 +33,8 @@ def transfer_learning(to_tensors, from_tensors, tau=1.):
             # C <- C * tau + C_old * (1-tau)
             tf.assign(to_t, tf.multiply(from_t, tau) + tf.multiply(to_t, 1. - tau))
         )
-    return update_op #tf.group(*update_op)
+
+    return tf.group(*update_op)
 
 
 def get_pa(p, acts, batch_size):
@@ -61,8 +63,8 @@ def save(sess, save_path, var_list=None):
         tf.logging.error(e)
 
 
-def fc(x, h_size, name, act=None, std=0.1):
-    with tf.variable_scope(name):
+def fc(x, h_size, name, reuse=False, act=None, std=0.1):
+    with tf.variable_scope(name, reuse=reuse):
         input_size = x.get_shape()[1]
         w = tf.get_variable('w', (input_size, h_size), initializer=tf.random_normal_initializer(stddev=std))
         b = tf.get_variable('b', (h_size), initializer=tf.constant_initializer(0.0))
@@ -72,3 +74,43 @@ def fc(x, h_size, name, act=None, std=0.1):
         return z
 
 
+def make_config(num_cpu, memory_fraction=.25):
+    tf_config = tf.ConfigProto(
+        inter_op_parallelism_threads=num_cpu,
+        intra_op_parallelism_threads=num_cpu,
+        log_device_placement=False
+    )
+    tf_config.gpu_options.allow_growth = True
+    # tf_config.gpu_options.per_rpocess_gpu_memory_fraction = memory_fraction
+    return tf_config
+
+
+def discount(x, gamma):
+    return lfilter([1], [1, -gamma], x[::-1], axis=0)[::-1]
+
+
+def train_op(grads, vars, optim=tf.train.RMSPropOptimizer, global_step=None, use_lock=True, max_clip=40., lr=1e-4):
+    grads, _ = tf.clip_by_global_norm(t_list=grads, clip_norm=max_clip)
+    return tf.group(optim(learning_rate=lr, use_locking=use_lock).apply_gradients(zip(grads, vars),
+                                                                                  global_step=global_step))
+
+
+def get_env_dims(env_name):
+    raise Exception("NOPE")
+    obs_dim = env.observation_space.shape[0]
+    acts_dim = env.action_space.n
+    env.close()
+    return obs_dim, acts_dim
+
+
+def get_default_session():
+    return tf.get_default_session()
+
+
+def compute_gae(rws, r_hat, vs, gamma=0.95, _lambda=1.0):
+    d_rws = np.append(rws, r_hat)
+    d_rws = discount(d_rws, gamma)[:-1]
+    vs = np.append(vs, r_hat)
+    td_error = rws + gamma * vs[1:] - vs[:-1]
+    adv = discount(td_error, gamma=gamma * _lambda)
+    return d_rws, adv

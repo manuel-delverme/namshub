@@ -7,7 +7,7 @@ import datetime
 import six
 import sys
 from collections import deque
-from tf_utils import fc
+from oldtf_utils import fc
 import BitEnv
 import random
 import numpy as np
