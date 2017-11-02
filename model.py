@@ -1,4 +1,5 @@
 import tensorflow as tf
+import commons.ops
 from tensorflow.contrib.framework import get_or_create_global_step
 
 from tf_utils import fc, get_trainable_variables, transfer_learning
@@ -26,9 +27,24 @@ class ActorCritic(object):
 
     def __build_graph(self, acts_dim, units=64, act=tf.nn.relu):
         with tf.variable_scope(self.scope):
-            h = self.obs
-            for idx, size in enumerate(units):
-                h = fc(x=h, h_size=size, act=act, name='h_{}'.format(idx))
+            h = tf.reshape(self.obs, (-1, 100, 4))
+            # shared block
+            input_channels = h.shape.dims[2].value
+            for filter_width, output_channels in zip(*([5, 3, 1], [3, 2, 1])):
+                filter_shape = [filter_width, input_channels, output_channels]
+                W = tf.Variable(tf.truncated_normal(filter_shape, stddev=0.1), name="W")
+                b = tf.Variable(tf.constant(0.1, shape=[output_channels]), name="b")
+                conv = tf.nn.conv1d(
+                    h, W, stride=1,
+                    padding="SAME",
+                    name="conv",
+                )
+                h = tf.nn.relu(tf.nn.bias_add(conv, b), name="relu")
+
+                input_channels = output_channels
+
+            # for idx, size in enumerate(units):
+            #     h = fc(x=h, h_size=size, act=act, name='h_{}'.format(idx))
 
             with tf.variable_scope('actor'):
                 self._pi = fc(h, h_size=acts_dim, act=None, name='actor')
