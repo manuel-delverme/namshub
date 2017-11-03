@@ -17,7 +17,7 @@ network_config = {
 }
 training_config = {
     'env_name': 'CartPole-v0',
-    'n_threads': 1,  # multiprocessing.cpu_count()
+    'n_threads': 5,  # multiprocessing.cpu_count()
     'max_ep': np.inf,
     'update_freq': 10,
     'gamma': 0.95,
@@ -27,7 +27,6 @@ training_config = {
 
 def main():
     obs_dim, acts_dim = get_env_dims(training_config['env_name'])
-    print("obs", obs_dim, "acts", acts_dim)
     sess = tf.Session(config=make_config(num_cpu=training_config['n_threads']))
     with tf.device("/cpu:0"):
         target = ActorCritic(scope='target', obs_dim=obs_dim, acts_dim=acts_dim,

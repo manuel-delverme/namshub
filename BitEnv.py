@@ -113,7 +113,8 @@ class MarketData(object):
 
 
 class BitEnv(gym.Env):
-    def __init__(self, use_historic_data=False):
+    def __init__(self, use_historic_data=False, verbose=True):
+        self.verbose = verbose
         self.taken_actions = {
             MarketActions.SELL: 0,
             MarketActions.BUY: 0,
@@ -133,13 +134,14 @@ class BitEnv(gym.Env):
         self.liquid_budget = self.initial_budget
         self.invested_budget = 0
 
-        print("init")
+        # print("init")
         if use_historic_data:
             self.S = CachedMarketData(self.init_coinbase())
         else:
             self.S = MarketData()
 
-        self.progress_bar = tqdm.tqdm(total=len(self.S), unit="samples")
+        if self.verbose:
+            self.progress_bar = tqdm.tqdm(total=len(self.S), unit="samples")
 
         self.action_space = spaces.Discrete(len([0, 1, 2]))
         # self.action_space = spaces.Box(
@@ -211,7 +213,8 @@ class BitEnv(gym.Env):
         reward = agent_value - penalty
 
         self.sim_time += 1
-        self.progress_bar.update(1)
+        if self.verbose:
+            self.progress_bar.update(1)
 
         done = self.sim_time == self.sim_time_max or self.sim_time == len(self.S) or (not can_buy_btc)
 

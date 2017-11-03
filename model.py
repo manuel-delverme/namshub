@@ -1,4 +1,5 @@
 import tensorflow as tf
+from tensorflow.contrib.layers import flatten
 import commons.ops
 from tensorflow.contrib.framework import get_or_create_global_step
 
@@ -27,7 +28,7 @@ class ActorCritic(object):
 
     def __build_graph(self, acts_dim, units=64, act=tf.nn.relu):
         with tf.variable_scope(self.scope):
-            h = tf.reshape(self.obs, (-1, 100, 4))
+            h = tf.reshape(self.obs, (-1, 100, 5))
             # shared block
             input_channels = h.shape.dims[2].value
             for filter_width, output_channels in zip(*([5, 3, 1], [3, 2, 1])):
@@ -42,6 +43,7 @@ class ActorCritic(object):
                 h = tf.nn.relu(tf.nn.bias_add(conv, b), name="relu")
 
                 input_channels = output_channels
+            h = flatten(h)
 
             # for idx, size in enumerate(units):
             #     h = fc(x=h, h_size=size, act=act, name='h_{}'.format(idx))

@@ -4,7 +4,7 @@ from agent import A3C
 
 class Worker(object):
     def __init__(self, name, target, network_config, training_config):
-        self.env = BitEnv.BitEnv(use_historic_data=True)  # gym.make(training_config['env_name'])  # .unwrapped
+        self.env = BitEnv.BitEnv(use_historic_data=True, verbose=(name == 'worker_0'))  # gym.make(training_config['env_name'])  # .unwrapped
         self.name = name
         self.agent = A3C(name, self.env.observation_space.shape[0], self.env.action_space.n, target, network_config)
         self.ep_stats = {'ep_rw': 0, 'ep_len': 0, 'total_ep': 0}
@@ -42,9 +42,10 @@ class Worker(object):
                 losses, global_step = self.agent.train(feed_dict=feed_dict)
                 if self.name == 'worker_0' and done and self.ep_stats['total_ep'] % 10 == 0:
                     self.env.print_stats(
-                        extra=" ".join((self.name, "Global_step:", global_step,
-                                        '| Total_ep: %i' % self.ep_stats['total_ep'],
-                                        "| Ep_r: %i" % self.ep_stats['ep_r'],
-                                        '| Ep_a_loss: %i' % losses[0],
-                                        '| Ep_c_Loss: %i' % losses[1]
-                        )))
+                        extra=
+                        " ".join((self.name, "Global_step:", str(global_step),
+                                  '| Total_ep: {}'.format(self.ep_stats['total_ep']),
+                                  "| Ep_r: {}".format(self.ep_stats['ep_r']),
+                                  '| Ep_a_loss: {}'.format(losses[0]),
+                                  '| Ep_c_Loss: {}'.format(losses[1])
+                                  )))
