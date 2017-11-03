@@ -1,3 +1,7 @@
+import numpy as np
+import matplotlib.pyplot as plt
+from commons.tf_utils import build_z
+
 class LinearSchedule(object):
     def __init__(self, init_value, final_value, max_steps):
         self.max_steps = max_steps
@@ -8,10 +12,6 @@ class LinearSchedule(object):
         fraction = min(float(t) / self.max_steps, 1.0)
         return self.init_value + fraction * (self.final_value - self.init_value)
 
-
-import numpy as np
-import matplotlib.pyplot as plt
-from oldtf_utils import build_z
 
 
 class PlotMachine(object):
