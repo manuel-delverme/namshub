@@ -1,7 +1,7 @@
 import numpy as np
 from tensorflow import get_default_session
 
-from model import ActorCritic
+from models.actor_critic import ActorCritic
 
 
 class A3C(object):

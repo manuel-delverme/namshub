@@ -1,8 +1,8 @@
-import tensorflow as tf
 import os
+
 import numpy as np
+import tensorflow as tf
 from scipy.signal import lfilter
-import gym
 
 
 def build_z(v_min, v_max, n_atoms):
@@ -11,7 +11,7 @@ def build_z(v_min, v_max, n_atoms):
     return z, dz
 
 
-def categorical_sample(logits, d = None):
+def categorical_sample(logits):
     value = tf.squeeze(tf.multinomial(logits - tf.reduce_max(logits, [1], keep_dims=True), 1), [1])
     return value  # tf.one_hot(value, d)
 
@@ -33,22 +33,15 @@ def get_trainable_variables(scope):
 
 def transfer_learning(to_tensors, from_tensors, tau=1.):
     update_op = []
-    # for from_t, to_t in zip(sorted(from_tensors, key=lambda v: v.name),
-    #                         sorted(to_tensors, key=lambda v: v.name)):
-    #     update_op.append(
-    #         # C <- C * tau + C_old * (1-tau)
-    #         tf.assign(to_t, tf.multiply(from_t, tau) + tf.multiply(to_t, 1. - tau))
-    #     )
+    for from_t, to_t in zip(sorted(from_tensors, key=lambda v: v.name),
+                            sorted(to_tensors, key=lambda v: v.name)):
+        update_op.append(
+            # C <- C * tau + C_old * (1-tau)
+            tf.assign(to_t, tf.multiply(from_t, tau) + tf.multiply(to_t, 1. - tau))
+        )
 
-    update_op = [v1.assign(v2) for v1, v2 in zip(to_tensors, from_tensors)]
+    return update_op
 
-    return tf.group(*update_op)
-
-
-# def transfer_learning(to_tensors, from_tensors, tau = 1.):
-#     update_op = [l_p.assign(g_p) for l_p, g_p in zip(to_tensors, from_tensors)]
-#     # update_op = [ t.assign(tf.multiply(f, tau) + tf.multiply(t, 1.-tau)) for t,f in zip(to_tensors, from_tensors)]
-#     return update_op # tf.group(*update_op)
 
 def get_pa(p, acts, batch_size):
     cat_idx = tf.transpose(
@@ -94,7 +87,6 @@ def make_config(num_cpu, memory_fraction=.25):
         log_device_placement=False
     )
     tf_config.gpu_options.allow_growth = True
-    # tf_config.gpu_options.per_rpocess_gpu_memory_fraction = memory_fraction
     return tf_config
 
 
@@ -109,7 +101,7 @@ def train_op(grads, vars, optim=tf.train.RMSPropOptimizer, global_step=None, use
 
 
 def get_env_dims(env_name):
-    import BitEnv
+    from env import BitEnv
     env = BitEnv.BitEnv()
     obs_dim = env.observation_space.shape[0]
     acts_dim = env.action_space.n

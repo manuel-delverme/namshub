@@ -1,16 +1,12 @@
-import tensorflow as tf
-from tqdm import tqdm
 import os
-from network import ActorCritic
-from async_agent import A3CGroupAgent
-import datetime
-import six
-import sys
-from collections import deque
-from oldtf_utils import fc
-import BitEnv
-import random
+
 import numpy as np
+import tensorflow as tf
+from async_agent import A3CGroupAgent
+from network import ActorCritic
+from tqdm import tqdm
+
+from env import BitEnv
 
 
 def main():

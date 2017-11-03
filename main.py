@@ -1,10 +1,11 @@
 import threading
+
 import numpy as np
 import tensorflow as tf
-from model import ActorCritic
-from worker import Worker
 
-from tf_utils import get_env_dims, make_config
+from agents.worker import Worker
+from commons.tf_utils import get_env_dims, make_config
+from models.actor_critic import ActorCritic
 
 network_config = {
     'units': [128,],
