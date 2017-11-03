@@ -18,7 +18,7 @@ network_config = {
 }
 training_config = {
     'env_name': 'CartPole-v0',
-    'n_threads': 4,  # multiprocessing.cpu_count()
+    'n_threads': 1,  # multiprocessing.cpu_count()
     'max_ep': np.inf,
     'update_freq': 10,
     'gamma': 0.95,

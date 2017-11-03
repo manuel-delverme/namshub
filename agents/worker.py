@@ -1,5 +1,5 @@
 from agents.a3c import A3C
-from bit_env import BitEnv
+from env import BitEnv
 
 
 class Worker(object):
