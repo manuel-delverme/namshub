@@ -29,7 +29,7 @@ training_config = {
 def main():
     obs_dim, acts_dim = get_env_dims(training_config['env_name'])
     print("obs", obs_dim, "acts", acts_dim)
-    sess = tf.Session(config=make_config(num_cpu=training_config['n_threads']))
+    sess =  tf.Session(config=make_config(num_cpu=training_config['n_threads']))
     with tf.device("/cpu:0"):
         target = ActorCritic(scope='target', obs_dim=obs_dim, acts_dim=acts_dim,
                              network_config=network_config)  # we only need its params

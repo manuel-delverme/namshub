@@ -3,6 +3,7 @@ import os
 import numpy as np
 import tensorflow as tf
 from scipy.signal import lfilter
+from tensorflow.contrib.layers import flatten
 
 
 def build_z(v_min, v_max, n_atoms):
@@ -90,6 +91,15 @@ def make_config(num_cpu, memory_fraction=.25):
     return tf_config
 
 
+def make_session(num_cpu=1):
+    return tf.Session(config=make_config(num_cpu=num_cpu))
+
+
+def init_graph(sess):
+    sess.run(tf.global_variables_initializer())
+    tf.logging.info('Graph initialized')
+
+
 def discount(x, gamma):
     return lfilter([1], [1, -gamma], x[::-1], axis=0)[::-1]
 
@@ -120,3 +130,22 @@ def compute_gae(rws, r_hat, vs, gamma=0.95, _lambda=1.0):
     td_error = rws + gamma * vs[1:] - vs[:-1]
     adv = discount(td_error, gamma=gamma * _lambda)
     return d_rws, adv
+
+def conv1d(obs, seq_len = 100, obs_dim = 5):
+    h = tf.reshape(obs, (-1, seq_len, obs_dim))
+    # shared block
+    input_channels = h.shape.dims[2].value
+    for filter_width, output_channels in zip(*([5, 3, 1], [3, 2, 1])):
+        filter_shape = [filter_width, input_channels, output_channels]
+        W = tf.Variable(tf.truncated_normal(filter_shape, stddev=0.1), name="W")
+        b = tf.Variable(tf.constant(0.1, shape=[output_channels]), name="b")
+        conv = tf.nn.conv1d(
+            h, W, stride=1,
+            padding="SAME",
+            name="conv",
+        )
+        h = tf.nn.relu(tf.nn.bias_add(conv, b), name="relu")
+
+        input_channels = output_channels
+    h = flatten(h)
+    return h

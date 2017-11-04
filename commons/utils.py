@@ -15,8 +15,8 @@ class LinearSchedule(object):
 
 
 class PlotMachine(object):
-    def __init__(self, agent, p_params, n_actions, action_set=None):
-        z, self.dz = build_z(**p_params)
+    def __init__(self, agent, v_min, v_max, nb_atoms, n_actions, action_set=None):
+        z, self.dz = build_z(v_min, v_max, nb_atoms)
         self.z = agent.sess.run(z)
         # turn interactive mode on
         plt.ion()
