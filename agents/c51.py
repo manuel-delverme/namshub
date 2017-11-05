@@ -10,9 +10,19 @@ class Agent(object):
     def __init__(self, obs_dim, acts_dim, agent_config, train_config):
         self.acts_dim = acts_dim
         self.eps = 1.
-        self.target = DQN(name='target', obs_dim=obs_dim, acts_dim=acts_dim, network_config=agent_config['network'])
-        self.local = DQN(name='agent', obs_dim=obs_dim, acts_dim=acts_dim, network_config=agent_config['network'])
-        self.memory = ReplayBuffer(size=train_config['batch_size'])
+
+        # TODO this should be cleaned up
+        self.target = DQN(name='target', obs_dim=obs_dim, acts_dim=acts_dim, network_config=agent_config['network'],
+                          gamma=agent_config['gamma'],
+                          v_min=agent_config['v_min'],
+                          v_max=agent_config['v_max'],
+                          nb_atoms=agent_config['nb_atoms'])
+        self.local = DQN(name='agent', obs_dim=obs_dim, acts_dim=acts_dim, network_config=agent_config['network'],
+                         gamma=agent_config['gamma'],
+                         v_min=agent_config['v_min'],
+                         v_max=agent_config['v_max'],
+                         nb_atoms=agent_config['nb_atoms'])
+        self.memory = ReplayBuffer(size=train_config['buffer_size'])
         self.scheduler = LinearSchedule(init_value=1., final_value=train_config['final_eps'],
                                         max_steps=(train_config['max_steps'] * train_config['expl_fraction']))
         self.__sync_op = transfer_learning(to_tensors=get_trainable_variables(scope='target'),
