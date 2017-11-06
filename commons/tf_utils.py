@@ -111,7 +111,7 @@ def train_op(grads, vars, optim=tf.train.RMSPropOptimizer, global_step=None, use
 
 
 def get_env_dims(env_name):
-    from env import BitEnv
+    from bit_env import BitEnv
     env = BitEnv.BitEnv()
     obs_dim = env.observation_space.shape[0]
     acts_dim = env.action_space.n
