@@ -8,12 +8,12 @@ from commons.tf_utils import get_env_dims, make_config
 from models.actor_critic import ActorCritic
 
 network_config = {
-    'units': [128,],
+    'units': [128, ],
     'act': tf.nn.elu,
     'lr': 1e-3,
     'optim': tf.train.RMSPropOptimizer,
     'clip': 40.0,
-    'beta': 1e-3
+    'beta': 1e-1
 
 }
 training_config = {
@@ -21,7 +21,7 @@ training_config = {
     'n_threads': 1,  # multiprocessing.cpu_count()
     'max_ep': np.inf,
     'update_freq': 10,
-    'gamma': 0.95,
+    'gamma': 0.9,
     '_lambda': 1.0,
 }
 
@@ -36,7 +36,8 @@ def main():
         workers = []
         # Create worker
         for idx in range(training_config['n_threads']):
-            workers.append(Worker('worker_{}'.format(idx), target, network_config=network_config, training_config=training_config))
+            workers.append(
+                Worker('worker_{}'.format(idx), target, network_config=network_config, training_config=training_config))
     coord = tf.train.Coordinator()
     sess.run(tf.global_variables_initializer())
     worker_threads = []
