@@ -5,7 +5,6 @@ from env import BitEnv
 class Worker(object):
     def __init__(self, name, target, network_config, training_config):
         self.env = BitEnv.BitEnv(use_historic_data=True, verbose=  (name=='worker_0'))  # gym.make(training_config['env_name'])  # .unwrapped
-        self.env = BitEnv.BitEnv(use_historic_data=True, verbose=(name == 'worker_0'))  # gym.make(training_config['env_name'])  # .unwrapped
         self.name = name
         self.agent = A3C(name, self.env.observation_space.shape[0], self.env.action_space.n, target, network_config)
         self.ep_stats = {'ep_rw': 0, 'ep_len': 0, 'total_ep': 0}
