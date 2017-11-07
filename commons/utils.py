@@ -1,6 +1,8 @@
 import numpy as np
+import time
 import matplotlib.pyplot as plt
 from commons.tf_utils import build_z
+
 
 class LinearSchedule(object):
     def __init__(self, init_value, final_value, max_steps):
@@ -11,7 +13,6 @@ class LinearSchedule(object):
     def value(self, t):
         fraction = min(float(t) / self.max_steps, 1.0)
         return self.init_value + fraction * (self.final_value - self.init_value)
-
 
 
 class PlotMachine(object):
@@ -38,3 +39,17 @@ class PlotMachine(object):
                 rect.set_height(y)
         self.fig.canvas.draw()
         self.fig.canvas.flush_events()
+
+
+class PrintMachine(object):
+    def __init__(self, delay):
+        self.delay = delay
+
+    def restart(self):
+        self.end_time = time.time() + self.delay
+
+    def is_up_reset(self):
+        is_up = self.end_time < time.time()
+        if is_up:
+            self.restart()
+        return is_up

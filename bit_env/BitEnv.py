@@ -202,6 +202,8 @@ class BitEnv(gym.Env):
         elif action == MarketActions.NOOP:
             pass
 
+        self.sim_time += 1
+        done = self.sim_time == self.sim_time_max or self.sim_time == len(self.S) or (not can_buy_btc)
         # normalized_initial_investment = (self.initial_budget + 0) * (new_price / self.initial_price)
         # agent_value = (self.invested_budget * new_price + self.liquid_budget)
 
@@ -209,14 +211,16 @@ class BitEnv(gym.Env):
         # simone style
 
         # whitehead style
-        agent_value = (self.liquid_budget - self.initial_budget) / self.initial_budget
-        reward = agent_value - penalty
+        # agent_value = (self.liquid_budget - self.initial_budget) / self.initial_budget
+        if not done:
+            agent_value = (self.liquid_budget - self.initial_budget) / self.initial_budget
+        else:
+            agent_value = ((
+                           self.liquid_budget - self.invested_budget * new_price) - self.initial_budget) / self.initial_budget
 
-        self.sim_time += 1
+        reward = agent_value - penalty
         if self.verbose:
             self.progress_bar.update(1)
-
-        done = self.sim_time == self.sim_time_max or self.sim_time == len(self.S) or (not can_buy_btc)
 
         assert self.sim_time <= self.sim_time_max
         assert self.sim_time < len(self.S)
@@ -289,7 +293,7 @@ class BitEnv(gym.Env):
         delta_cash = self.invested_budget * sell + self.liquid_budget - self.initial_budget
         print(
             # "progress:", round(self.sim_time / float(len(self.S)), 6),
-            # "epsilon", round(epsilon, 2),
+            "epsilon", round(epsilon, 2),
             "btc", round(self.invested_budget, 2),
             "$$", round(self.liquid_budget, 2),
             "price", round(sell, 2),

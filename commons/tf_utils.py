@@ -2,7 +2,7 @@ import os
 
 import numpy as np
 import tensorflow as tf
-from scipy.signal import lfilter
+# from scipy.signal import lfilter
 from tensorflow.contrib.layers import flatten
 
 
@@ -131,7 +131,8 @@ def compute_gae(rws, r_hat, vs, gamma=0.95, _lambda=1.0):
     adv = discount(td_error, gamma=gamma * _lambda)
     return d_rws, adv
 
-def conv1d(obs, seq_len = 100, obs_dim = 5):
+
+def conv1d(obs, seq_len=100, obs_dim=5):
     h = tf.reshape(obs, (-1, seq_len, obs_dim))
     # shared block
     input_channels = h.shape.dims[2].value
