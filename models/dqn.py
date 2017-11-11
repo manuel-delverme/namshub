@@ -6,12 +6,16 @@ from commons.tf_utils import fc, p_to_q, build_z, get_trainable_variables, get_p
 class DQN(object):
     def __init__(self, name, obs_dim, acts_dim, network_config, gamma=.95, v_min=-20., v_max=20., nb_atoms=51):
         self.scope = name
+        self._global_step = tf.train.get_or_create_global_step()
         self.__init_ph(obs_dim=obs_dim, acts_dim=acts_dim, n_atoms=nb_atoms)
         self.__build_graph(acts_dim=acts_dim, units=network_config['units'], act=network_config['act'],
                            nb_atoms=nb_atoms,
                            topology=network_config['topology'])
         self.__predict_op(v_min=v_min, v_max=v_max, n_atoms=nb_atoms)
         self.__train_op(lr=network_config['lr'], max_clip=network_config['max_clip'])
+        self._summary_op= summary_op([
+            self.obs, self.acts, self.rws, self.thtz, self.cross_entropy, self.q_values
+        ])
         if self.scope == 'target':
             self.__build_categorical(v_min, v_max, nb_atoms, gamma)
 
@@ -23,7 +27,7 @@ class DQN(object):
         self._params = get_trainable_variables(scope=self.scope)
         grads = tf.gradients(self.cross_entropy, self._params)
         grads, _ = tf.clip_by_global_norm(t_list=grads, clip_norm=max_clip)
-        self.train_op = opt.apply_gradients(zip(grads, self._params))
+        self.train_op = opt.apply_gradients(zip(grads, self._params), global_step=self._global_step)
 
     def __init_ph(self, obs_dim, acts_dim, n_atoms):
         self.obs = tf.placeholder(dtype=tf.float32, shape=[None, obs_dim], name='obs')
@@ -76,3 +80,10 @@ class DQN(object):
             Thz = tf.clip_by_value(1 - Tzz, 0, 1)
             # Integrate out the k column of the atom dimension
             self.ThTz = tf.einsum('ijk,ik->ij', Thz, self.p_best)
+
+def summary_op(t_list):
+    ops =  []
+    for t in t_list:
+        op = tf.summary.tensor_summary(name = t.name, tensor = t)
+        ops.append(op)
+    return tf.summary.merge(ops)

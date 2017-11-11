@@ -32,6 +32,10 @@ class Agent(object):
         self.reset_graph()
         self.update_target()
 
+    def get_train_summary(self, feed_dict):
+
+        return self.sess.run([self.local._summary_op, self.local._global_step], feed_dict = feed_dict)
+
     def reset_graph(self):
         init_graph(sess=self.sess)
 
@@ -50,14 +54,20 @@ class Agent(object):
         return self.sess.run(self.local.p, feed_dict={self.local.obs: obs})[0]
 
     def train(self, obs, acts, rws, obs1, dones):
-        # =============
         # TODO this should be done inside the TF graph....
-        # =============
         thtz = self.sess.run([self.target.ThTz],
                              feed_dict={self.target.obs: obs1, self.target.rws: rws, self.target.dones: dones})[0]
         loss, _ = self.sess.run([self.local.cross_entropy, self.local.train_op],
                                 feed_dict={self.local.obs: obs, self.local.acts: acts, self.local.thtz: thtz})
-        return loss
+
+        feed_dict = {
+            self.local.obs:obs,
+            self.local.acts:acts,
+            self.local.thtz:thtz,
+            self.local.rws:rws
+        }
+
+        return loss, feed_dict
 
     def close(self):
         self.sess.close()

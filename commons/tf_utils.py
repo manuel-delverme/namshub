@@ -59,10 +59,10 @@ def load_model(sess, load_path, var_list=None):
     except Exception as e:
         tf.logging.error(e)
 
-
-def save(sess, save_path, var_list=None):
+def create_saver(var_list, id_run = 0):
+    return tf.train.Saver(var_list= var_list, max_to_keep=5, filename='_run{}'.format(id_run))
+def save(saver, sess, save_path):
     os.makedirs(save_path, exist_ok=True)
-    saver = tf.train.Saver(var_list=var_list)
     try:
         saver.save(sess=sess, save_path=os.path.join(save_path, 'model.ckpt'),
                    write_meta_graph=False)
@@ -112,7 +112,7 @@ def train_op(grads, vars, optim=tf.train.RMSPropOptimizer, global_step=None, use
 
 def get_env_dims(env_name):
     from bit_env import BitEnv
-    env = BitEnv.BitEnv()
+    env = BitEnv.BitEnv(None)
     obs_dim = env.observation_space.shape[0]
     acts_dim = env.action_space.n
     env.close()
@@ -150,3 +150,6 @@ def conv1d(obs, seq_len=100, obs_dim=5):
         input_channels = output_channels
     h = flatten(h)
     return h
+
+def create_writer(logdir):
+    return tf.summary.FileWriter(logdir=logdir)

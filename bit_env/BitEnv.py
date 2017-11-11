@@ -1,8 +1,10 @@
+import csv
 import datetime
 import queue
 import random
 import sys
 import time
+from collections import OrderedDict
 
 import gym
 import numpy as np
@@ -18,7 +20,7 @@ VERY_SMALL_NUMBER = 0.01
 class MarketActions(object):
     SELL = 0
     BUY = 1
-    NOOP = 2
+    KEEP = 2
 
 
 class Observations(object):
@@ -114,42 +116,51 @@ class MarketData(object):
 
 
 class BitEnv(gym.Env):
-    def __init__(self, use_historic_data=False, verbose=True):
-        self.verbose = verbose
+    def __init__(self, max_loss, max_gain, bitcoin_fraction, transaction_fee, max_timesteps, initial_budget,
+                 history_length, verbose, use_historic_data, logger_path = 'logs/logs.csv'):
+        # TODO a counter should be a property of the action market action class
         self.taken_actions = {
             MarketActions.SELL: 0,
             MarketActions.BUY: 0,
-            MarketActions.NOOP: 0,
+            MarketActions.KEEP: 0,
         }
+        self._logger_path = logger_path
+        self._write_head = True
+        self.max_loss = max_loss
+        self.max_gain = max_gain
+        self.bitcoin_fraction = bitcoin_fraction
+        self.transaction_fee = transaction_fee
+        self.sim_ep_max_length = self.sim_ep_timestep_bound = max_timesteps
+        self.initial_budget = self.liquid_budget = initial_budget
+        # max_loss = .20
+        # max_gain = .50
+        # self.is_greedy = (max_loss, max_gain)
+        # self.range = 1000  # +/- value the randomly select number can be between
+        # self.bounds = 5000  # Action space bounds
+
+        # self.number = 0
+        # step counter
         self.ledger = []
-        self.range = 1000  # +/- value the randomly select number can be between
-        self.bounds = 5000  # Action space bounds
-
-        self.bitcoin_fraction = 1 / 10
-        self.number = 0
-        self.sim_time = 0
-        self.sim_episode_length = 200
-        self.sim_time_max = self.sim_episode_length
-
-        self.initial_budget = 1000
-        self.liquid_budget = self.initial_budget
-        self.invested_budget = 0
+        self.sim_time, self.invested_budget = 0, 0
+        # sim_ep_length: hyper parameter, sim_time_max is a bound on the end of the episode
+        # self.liquid_budget = self.initial_budget
 
         if use_historic_data:
             self.S = CachedMarketData(self.init_coinbase())
         else:
             self.S = MarketData()
 
+        self.verbose = verbose
         if self.verbose:
             self.progress_bar = tqdm.tqdm(total=len(self.S), unit="samples")
 
         self.action_space = spaces.Discrete(len([0, 1, 2]))
-        # self.action_space = spaces.Box(
 
         self._seed()
-        self.history = queue.deque(maxlen=100)
+        self.history = queue.deque(maxlen=history_length)
+        # TODO don't think this should be here
         first_observation = self._preprocess_state()
-        for _ in range(100):
+        for _ in range(history_length):
             self.history.append(first_observation.copy())
         self.observation = self._reset()
         obs_dim = self.observation.shape[0]
@@ -174,19 +185,19 @@ class BitEnv(gym.Env):
     def _step(self, action):
         assert self.action_space.contains(action)
         self.observation = self._preprocess_state()
+        self.taken_actions[action] += 1
 
+        penalty = 0
         new_price = self.S[self.sim_time][Observations.SELL]
         transaction_fee = self.bitcoin_fraction * (0.16 / 100)
 
-        penalty = 0
-        self.taken_actions[action] += 1
         can_buy_btc = self.liquid_budget > (new_price * self.bitcoin_fraction + transaction_fee)
         if action == MarketActions.SELL:
             if self.invested_budget > self.bitcoin_fraction and self.liquid_budget > transaction_fee:
                 self.invested_budget -= self.bitcoin_fraction
                 self.liquid_budget += new_price * self.bitcoin_fraction
                 self.liquid_budget -= transaction_fee
-                self.ledger.append(new_price)
+                self.ledger.append(new_price)  # doesn't make sense
             else:
                 penalty += 1
 
@@ -199,35 +210,41 @@ class BitEnv(gym.Env):
             else:
                 penalty += 1
 
-        elif action == MarketActions.NOOP:
+        elif action == MarketActions.KEEP:
             pass
 
+        # (new_price - self.initial_price)/self.initial_price
         self.sim_time += 1
-        done = self.sim_time == self.sim_time_max or self.sim_time == len(self.S) or (not can_buy_btc)
+        done = self.sim_time == self.sim_ep_timestep_bound or self.sim_time == len(self.S) or (not can_buy_btc)
         # normalized_initial_investment = (self.initial_budget + 0) * (new_price / self.initial_price)
-        # agent_value = (self.invested_budget * new_price + self.liquid_budget)
-
-
-        # simone style
-
-        # whitehead style
         # agent_value = (self.liquid_budget - self.initial_budget) / self.initial_budget
-        if not done:
-            agent_value = (self.liquid_budget - self.initial_budget) / self.initial_budget
-        else:
-            agent_value = ((
-                           self.liquid_budget - self.invested_budget * new_price) - self.initial_budget) / self.initial_budget
+        current_budget = (self.invested_budget * new_price + self.liquid_budget)
+        portfolio_value = (current_budget - self.initial_budget) / self.initial_budget
 
-        reward = agent_value - penalty
+        bonus = 0
+        if done:
+            # I want to be able to manage risk profile using bonuses or..goals :)
+            if portfolio_value > self.max_gain:
+                bonus = 10
+            elif portfolio_value < self.max_loss:
+                bonus = -10
+
+                # current_value = self.liquid_budget - self.invested_budget * new_price
+                # agent_value = (current_value - self.initial_budget) / self.initial_budget
+                # current_value = self.invested_budget * new_price
+                # portfolio_value = (self.liquid_budget + current_value - self.initial_budget) / self.initial_budget
+
+        reward = portfolio_value - penalty + bonus
+
         if self.verbose:
             self.progress_bar.update(1)
 
-        assert self.sim_time <= self.sim_time_max
-        assert self.sim_time < len(self.S)
-        assert self.invested_budget >= 0
+        assert self.sim_time <= self.sim_ep_timestep_bound or self.sim_time < len(self.S) or self.invested_budget > 0
+        # assert self.sim_time < len(self.S)
+        # assert self.invested_budget >= 0
         # print(self.liquid_budget)
         if self.liquid_budget < 0:
-            print(self.liquid_budget, "< 0")
+            print(self.liquid_budget, "Liquid budget < 0 ")
             raise AssertionError()
 
         return self.observation, reward, done, {"time_step": self.sim_time}
@@ -237,37 +254,37 @@ class BitEnv(gym.Env):
 
     def _reset(self):
         # self.sim_time -= int(self.sim_time_max / 10)  # TODO try re-experience a 1th of the last run
-        self.sim_time_max = self.sim_time + self.sim_episode_length
+        self.sim_ep_timestep_bound = self.sim_time + self.sim_ep_max_length
 
         self.initial_price = self.S[self.sim_time][Observations.SELL]
-        # sell everything from last run and start anew
+        # sell everything from last run and start a new
         self.initial_budget = self.liquid_budget + self.invested_budget * self.initial_price
         return self._preprocess_state()
 
     def _preprocess_state(self):
-        PERIOD = 10
+        # PERIOD = 10
 
         buy, sell, volume = tuple(self.S[self.sim_time])
         state = [buy, sell, volume, self.invested_budget, self.liquid_budget]
-        """
+        # TODO: can we deprecate this
 
-        period = min(PERIOD, self.sim_time + 1 + 1)
-        start = max(self.sim_time - period, 0)
-        price_history = self.S[start:self.sim_time + 1][:, 0]
-
-        indicators = [
-            technical_indicators.exponential_moving_average.exponential_moving_average,
-            technical_indicators.simple_moving_average.simple_moving_average,
-            technical_indicators.bollinger_bands.bandwidth,
-        ]
-        # TODO: handle values before -2, either avoid calculation or add to state
-        for indicator in indicators:
-            if period > len(price_history):
-                value = [0]
-            else:
-                value = indicator(price_history, period=period)
-            state.append(value[-1])
-        """
+        #  TODO:  values before -2, either avoid calculation or add to state
+        # period = min(PERIOD, self.sim_time + 1 + 1)
+        # start = max(self.sim_time - period, 0)
+        # price_history = self.S[start:self.sim_time + 1][:, 0]
+        #
+        # indicators = [
+        #     technical_indicators.exponential_moving_average.exponential_moving_average,
+        #     technical_indicators.simple_moving_average.simple_moving_average,
+        #     technical_indicators.bollinger_bands.bandwidth,
+        # ]
+        # for indicator in indicators:
+        #     if period > len(price_history):
+        #         value = [0]
+        #     else:
+        #         value = indicator(price_history, period=period)
+        #     state.append(value[-1])
+        #
 
         # technical_indicators.moving_average_convergence_divergence
         # technical_indicators.exponential_moving_average
@@ -287,34 +304,90 @@ class BitEnv(gym.Env):
     def print_stats(self, epsilon=None, extra=""):
         buy, sell, volume = tuple(self.S[self.sim_time])
 
-        normalized_initial_investment = (self.initial_budget + 0) * (sell / self.initial_price)
+        # normalized_initial_investment = (self.initial_budget + 0) * (sell / self.initial_price)
         agent_value = (self.invested_budget * sell + self.liquid_budget)
-
-        delta_cash = self.invested_budget * sell + self.liquid_budget - self.initial_budget
-        print(
-            # "progress:", round(self.sim_time / float(len(self.S)), 6),
-            "epsilon", round(epsilon, 2),
-            "btc", round(self.invested_budget, 2),
-            "$$", round(self.liquid_budget, 2),
-            "price", round(sell, 2),
-            "ep_prft", round(delta_cash, 2),
-            # "gain_over_market", round(agent_value - normalized_initial_investment, 2),
-            "sordi", round(delta_cash + self.initial_budget, 2),
-            "hold", round((1000. / self.S[0][0]) * sell, 2) - round(delta_cash + self.initial_budget, 2),
-            self.taken_actions,
-            extra,
-            sep="\t",
-            file=sys.stderr,
+        delta_cash = agent_value - self.initial_budget
+        market_return = (sell - self.initial_price) / self.initial_price
+        ep_return = delta_cash / self.initial_budget
+        step = datetime.datetime.utcnow().strftime("%d-%m-%H-%M-%S")
+        ep_stats = OrderedDict(
+            epsilon=epsilon,
+            act_dist=self.taken_actions,
+            n_btc=self.invested_budget,
+            liquid_budget=self.liquid_budget,
+            agent_value=agent_value,
+            delta_cash=delta_cash,
+            ep_return=ep_return,
+            market_return=market_return,
+            return_over_market=ep_return / market_return,
+            trade_volume=self.taken_actions[MarketActions.BUY] - self.taken_actions[MarketActions.SELL],
+            adv_over_keep_policy=delta_cash + self.initial_budget - (1000. / self.S[0][0]) * sell,
         )
+        progress = round(self.sim_time / float(len(self.S)), 6)
+        print("===== Progress {} =====".format(progress))
+        for k, v in ep_stats.items():
+            # it's easy to ask forgiveness than permission
+            try:
+                print("{}: {:.3f}".format(k, v))
+            except TypeError:
+                print("{}: {}".format(k, v))
+        with open(self._logger_path, 'a') as fout:
+            writer = csv.DictWriter(fout, fieldnames=list(ep_stats.keys()) + ['step'])
+            if self._write_head == True:
+                writer.writeheader()
+                self._write_head = False
+            ep_stats['step'] = step
+            writer.writerow(ep_stats)
+
         self.taken_actions = {
             MarketActions.SELL: 0,
             MarketActions.BUY: 0,
-            MarketActions.NOOP: 0,
+            MarketActions.KEEP: 0,
         }
 
-
+        return ep_stats
+        # import tensorflow as tf
+        # ep_summary = tf.summary.Summary()
+        # writer = tf.summary.FileWriter(logdir='logs')
+        # Add max gain and max loss
+        # Add prize for goal directed behavior...something like - beta * (max_gain -ep_return)
+        # Market return per episode, final_price - opening price / opening price.
+        # Average market return 1/n return per episode
+        # Episode standard deviation, ep mean. Running variance, Running average price
+        # Invested budget, liquid budget, cash_out_value, cumulative balance
+        # Advantage_over_conservative_actor
+        # Value_loss_per_episode (maybe adjusted like value_loss_per_episode /
+        # Varies of value of the latest discounted state - (final_price -init_price) i.e true incremeent
+        # Action ditsribtuion plot
+        # Action distribution entropy
+        # Return_per_episode / number of seen datapoint
+        # P entropy
+        # Information gain: entropy_t-1 - entropy_t
+        # Dkl of p
+        # tensorboard:
+        # - conv weight
+        # - value loss
+        # - distribution over actions
+        # - distributions over state
+        # create logger file
+        # create trader dashboard
+        # print(
+        #     # "progress:", round(self.sim_time / float(len(self.S)), 6),
+        #     "epsilon", round(epsilon, 2),
+        #     "btc", round(self.invested_budget, 2),
+        #     "$$", round(self.liquid_budget, 2),
+        #     "price", round(sell, 2),
+        #     "ep_prft", round(delta_cash, 2),
+        #     # "gain_over_market", round(agent_value - normalized_initial_investment, 2),
+        #     "sordi", round(delta_cash + self.initial_budget, 2),
+        #     "hold",
+        #     self.taken_actions,
+        #     extra,
+        #     sep="\t",
+        #     file=sys.stderr,
+        # )
 def test_BitEnv():
-    env = BitEnv()
+    env = BitEnv(None)
     print(env.reset())
     done = False
     step = 0
