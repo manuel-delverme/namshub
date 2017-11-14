@@ -84,6 +84,6 @@ class DQN(object):
 def summary_op(t_list):
     ops =  []
     for t in t_list:
-        op = tf.summary.tensor_summary(name = t.name, tensor = t)
+        op = tf.summary.tensor_summary(name = t.name.split(':')[0], tensor = t)
         ops.append(op)
     return tf.summary.merge(ops)

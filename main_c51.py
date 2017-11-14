@@ -9,7 +9,7 @@ from commons.utils import PrintMachine
 
 tf.logging.set_verbosity(tf.logging.INFO)
 network_config = {
-    'units': (32, 16),
+    'units': (64, 32, 64),
     'topology': 'conv',  # 'fc',  # conv
     'act': tf.nn.relu,
     'lr': 1e-3,
@@ -18,10 +18,10 @@ network_config = {
 }
 
 agent_config = {
-    'gamma': 0.90,
-    'v_min': 0.,
-    'v_max': 25.,
-    'nb_atoms': 11,
+    'gamma': 0.95,
+    'v_min': -20.,
+    'v_max': +20.,
+    'nb_atoms': 51,
     '_lambda': 1.0,
     'network': network_config
 }
@@ -103,10 +103,10 @@ def main():
             batch = agent.memory.sample(batch_size=train_config['batch_size'])
             loss, feed_dict = agent.train(*batch)
         if printer.is_up_reset():
-            ep_stats = env.print_stats(epsilon=agent.eps,
-                                       extra='EP {}, total steps {}, loss {}, rw {}'.format(ep, total_steps,
-                                                                                            loss, ep_rw))
-            writer.add_summary(ep_stats, global_step=global_step)
+            env.print_stats(epsilon=agent.eps,
+                            extra='EP {}, total steps {}, loss {}, rw {}'.format(ep, total_steps,
+                                                                                 loss, ep_rw))
+            writer.add_summary(env.ep_summary, global_step=global_step)
             writer.flush()
             # plotter.plot_dist(obs=[ob])
         if total_steps % train_config['summary_freq'] == 0:

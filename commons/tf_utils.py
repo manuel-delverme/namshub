@@ -59,8 +59,11 @@ def load_model(sess, load_path, var_list=None):
     except Exception as e:
         tf.logging.error(e)
 
-def create_saver(var_list, id_run = 0):
-    return tf.train.Saver(var_list= var_list, max_to_keep=5, filename='_run{}'.format(id_run))
+
+def create_saver(var_list, id_run=0):
+    return tf.train.Saver(var_list=var_list, max_to_keep=5, filename='_run{}'.format(id_run))
+
+
 def save(saver, sess, save_path):
     os.makedirs(save_path, exist_ok=True)
     try:
@@ -151,5 +154,10 @@ def conv1d(obs, seq_len=100, obs_dim=5):
     h = flatten(h)
     return h
 
+
 def create_writer(logdir):
     return tf.summary.FileWriter(logdir=logdir)
+
+
+def get_summary():
+    return tf.summary.Summary()
