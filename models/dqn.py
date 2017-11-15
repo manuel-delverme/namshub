@@ -13,7 +13,7 @@ class DQN(object):
                            topology=network_config['topology'])
         self.__predict_op(v_min=v_min, v_max=v_max, n_atoms=nb_atoms)
         self.__train_op(lr=network_config['lr'], max_clip=network_config['max_clip'])
-        self._summary_op= summary_op([
+        self._summary_op = summary_op([
             self.obs, self.acts, self.rws, self.thtz, self.cross_entropy, self.q_values
         ])
         if self.scope == 'target':
@@ -45,7 +45,25 @@ class DQN(object):
             h = self.obs
             if topology == 'conv':
                 from commons.tf_utils import conv1d
-                conv1d(obs=h)
+                agent_state = h[:, -2:]
+                market_data = h[:, :-2]
+                short_term = market_data[:, :300]
+                mid_term = market_data[:, 300:315]
+                long_term = market_data[:, 315:]
+
+                out_short = conv1d(short_term, seq_len=100, obs_dim=3, kernel_sizes=[5, 3, 1],
+                                   output_channels=[3, 2, 1])
+                out_mid = conv1d(mid_term, seq_len=5, obs_dim=3, kernel_sizes=[3, 1], output_channels=[2, 1])
+                out_long = conv1d(long_term, seq_len=5, obs_dim=3, kernel_sizes=[3, ], output_channels=[1, ])
+
+                out_state = tf.concat((out_short, out_mid, out_long), axis=1)
+                # h = fc(x=out_state, h_size=16, act=act, name='market_merge_conv')
+                h = tf.concat((out_state, agent_state), axis=1)
+
+                # #STACKMORELAYERS
+                # h = fc(x=h, h_size=128, act=tf.nn.relu, name='layers_just_because_more_layers')
+
+                h = fc(x=h, h_size=2, act=tf.nn.relu, name='merge_layer_conv')
             else:
                 for idx, size in enumerate(units):
                     h = fc(x=h, h_size=size, act=act, name='h_{}'.format(idx))
@@ -81,9 +99,10 @@ class DQN(object):
             # Integrate out the k column of the atom dimension
             self.ThTz = tf.einsum('ijk,ik->ij', Thz, self.p_best)
 
+
 def summary_op(t_list):
-    ops =  []
+    ops = []
     for t in t_list:
-        op = tf.summary.tensor_summary(name = t.name.split(':')[0], tensor = t)
+        op = tf.summary.tensor_summary(name=t.name.split(':')[0], tensor=t)
         ops.append(op)
     return tf.summary.merge(ops)

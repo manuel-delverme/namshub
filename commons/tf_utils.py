@@ -135,11 +135,15 @@ def compute_gae(rws, r_hat, vs, gamma=0.95, _lambda=1.0):
     return d_rws, adv
 
 
-def conv1d(obs, seq_len=100, obs_dim=5):
+def conv1d(obs, seq_len=100, obs_dim=5, kernel_sizes=None, output_channels=None):
+    if output_channels is None:
+        output_channels = [3, 2, 1]
+    if kernel_sizes is None:
+        kernel_sizes = [5, 3, 1]
     h = tf.reshape(obs, (-1, seq_len, obs_dim))
     # shared block
     input_channels = h.shape.dims[2].value
-    for filter_width, output_channels in zip(*([5, 3, 1], [3, 2, 1])):
+    for filter_width, output_channels in zip(*(kernel_sizes, output_channels)):
         filter_shape = [filter_width, input_channels, output_channels]
         W = tf.Variable(tf.truncated_normal(filter_shape, stddev=0.1), name="W")
         b = tf.Variable(tf.constant(0.1, shape=[output_channels]), name="b")

@@ -49,7 +49,7 @@ env_config = {
     'initial_budget': 1000,
     'history_length': 100,
     'use_historic_data': True,
-    'verbose': False,
+    'verbose': True,
 }
 
 

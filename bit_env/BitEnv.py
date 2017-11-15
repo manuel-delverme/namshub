@@ -134,8 +134,10 @@ class BitEnv(gym.Env):
         self.max_gain = max_gain
         self.bitcoin_fraction = bitcoin_fraction
         self.transaction_fee = transaction_fee
-        self.sim_ep_max_length = self.sim_ep_timestep_bound = max_timesteps
-        self.initial_budget = self.liquid_budget = initial_budget
+        self.sim_ep_max_length = max_timesteps
+        self.sim_ep_timestep_bound = max_timesteps
+        self.initial_budget = initial_budget
+        self.liquid_budget = initial_budget
         self.ep_summary = get_summary()
         # max_loss = .20
         # max_gain = .50
@@ -146,7 +148,8 @@ class BitEnv(gym.Env):
         # self.number = 0
         # step counter
         self.ledger = []
-        self.sim_time, self.invested_budget = 0, 0
+        self.sim_time = 0
+        self.invested_budget = 0
         # sim_ep_length: hyper parameter, sim_time_max is a bound on the end of the episode
         # self.liquid_budget = self.initial_budget
 
@@ -157,16 +160,21 @@ class BitEnv(gym.Env):
 
         self.verbose = verbose
         if self.verbose:
-            self.progress_bar = tqdm.tqdm(total=len(self.S), unit="samples")
+            self.progress_bar = tqdm.tqdm(total=len(self.S), unit="samples", file=sys.stdout)
 
         self.action_space = spaces.Discrete(len([0, 1, 2]))
 
         self._seed()
-        self.history = queue.deque(maxlen=history_length)
+        self.short_term_history = queue.deque(maxlen=history_length)
+        self.medium_term_history = queue.deque(maxlen=history_length)
+        self.long_term_history = queue.deque(maxlen=history_length)
         # TODO don't think this should be here
-        first_observation = self._preprocess_state()
+        first_market_observation = self.query_market_history(obs_time=0)
         for _ in range(history_length):
-            self.history.append(first_observation.copy())
+            self.short_term_history.append(first_market_observation.copy())
+            # self.medium_term_history.append(np.zeros_like(first_market_observation))
+            # self.long_term_history.append(np.zeros_like(first_market_observation))
+
         self.observation = self._reset()
         obs_dim = self.observation.shape[0]
         self.observation_space = spaces.Box(
@@ -270,12 +278,25 @@ class BitEnv(gym.Env):
         return self._preprocess_state()
 
     def _preprocess_state(self):
-        # PERIOD = 10
-        buy, sell, volume = tuple(self.S[self.sim_time])
+        observation = self.query_market_history(self.sim_time)
+        self.short_term_history.append(np.array(observation))
 
-        state = [buy, sell, volume, self.invested_budget, self.liquid_budget]
-        self.history.append(np.array(state))
-        return np.array(self.history).flatten()
+        short_term_obs = np.array(self.short_term_history)
+        past_obs = []
+        for idx in range(5):
+            past_obs.append(self.query_market_history(self.sim_time - 1000 - idx))
+        for idx in range(5):
+            past_obs.append(self.query_market_history(self.sim_time - 10000 - idx))
+
+        observation = np.vstack((short_term_obs, past_obs)).flatten()
+        observation = np.append(observation, (self.invested_budget, self.liquid_budget))
+        return observation
+
+    def query_market_history(self, obs_time):
+        obs_time = max(obs_time, 0)
+        buy, sell, volume = tuple(self.S[obs_time])
+        observation = [buy, sell, volume]
+        return observation
 
     def print_stats(self, epsilon=None, extra=""):
         buy, sell, volume = tuple(self.S[self.sim_time])
@@ -287,6 +308,7 @@ class BitEnv(gym.Env):
         ep_return = delta_cash / self.initial_budget
         step = datetime.datetime.utcnow().strftime("%d-%m-%H-%M-%S")
         ep_stats = OrderedDict(
+            btc_price=sell,
             epsilon=epsilon,
             act_dist=self.taken_actions,
             n_btc=self.invested_budget,
@@ -297,11 +319,11 @@ class BitEnv(gym.Env):
             market_return=market_return,
             return_over_market=ep_return / market_return,
             trade_volume=self.taken_actions[MarketActions.BUY] - self.taken_actions[MarketActions.SELL],
-            adv_over_keep_policy=delta_cash + self.initial_budget - (1000. / self.S[0][0]) * sell,
+            adv_over_keep_policy=delta_cash + self.initial_budget - (self.initial_budget / self.S[0][0]) * sell,
         )
         progress = round(self.sim_time / float(len(self.S)), 6)
 
-        print("===== Progress {} =====".format(progress))
+        print("\n===== Progress {} =====".format(progress))
         for k, v in ep_stats.items():
             # it's easy to ask forgiveness than permission
             try:
@@ -365,8 +387,19 @@ class BitEnv(gym.Env):
         # )
 
 
-def test_BitEnv():
-    env = BitEnv(None)
+def _test_BitEnv():
+    env_config = {
+        'max_loss': -.2,
+        'max_gain': .5,
+        'bitcoin_fraction': .1,
+        'transaction_fee': .1 * .0016,
+        'max_timesteps': 200,
+        'initial_budget': 1000,
+        'history_length': 100,
+        'use_historic_data': True,
+        'verbose': False,
+    }
+    env = BitEnv(**env_config)
     print(env.reset())
     done = False
     step = 0
@@ -379,4 +412,4 @@ def test_BitEnv():
 
 
 if __name__ == "__main__":
-    test_BitEnv()
+    _test_BitEnv()
