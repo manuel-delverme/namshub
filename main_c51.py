@@ -1,16 +1,15 @@
 import numpy as np
 import tensorflow as tf
 
-import bit_env.BitEnv
 from agents.c51 import Agent
+from commons.logger import Logger
+
 # from commons.running_stats import ZFilter
-from commons.tf_utils import create_writer, create_saver
-from commons.utils import PrintMachine
 
 tf.logging.set_verbosity(tf.logging.INFO)
 network_config = {
     'units': (64, 32, 64),
-    'topology': 'conv',  # 'fc',  # conv
+    'topology': 'fc',  # 'fc',  # conv
     'act': tf.nn.relu,
     'lr': 1e-3,
     'max_clip': 40.
@@ -29,15 +28,18 @@ train_config = {
     # 'env_name': 'CartPole-v0',
     'max_ep': np.inf,  # int(1e5),
     'max_steps': 1e5 * 10,
-    'summary_freq': 100,
-    'save_freq': 1000,
-    'update_target_freq': 500,
+    'summary_freq': 1,
+    'save_freq': 5,
+    'update_target_freq': 5,
     'train_freq': 1,
     'num_cpu': 1,
     'batch_size': 64,
     'buffer_size': int(1e5),
     'expl_fraction': .5,
     'final_eps': .01,
+    'alpha_replay': .6,  # define the importance of the priority of the memory
+    'beta_replay': .4,
+    'use_replay': True
 }
 
 env_config = {
@@ -53,71 +55,63 @@ env_config = {
 }
 
 
-# TODO: add tensorbaord and add replay memory
-
-
-def warmup(env, ob_filter, steps=1000):
-    from numpy.random import randint
-    ob = env.reset()
-    for _ in range(steps):
-        ob = ob_filter(ob)
-        ob, _, done, _ = env.step(randint(0, env.action_space.n))
-        if done:
-            ob = env.reset()
-
-
 def main():
-    env = bit_env.BitEnv.BitEnv(**env_config)
+    # env = bit_env.BitEnv.BitEnv(**env_config)
+    import gym
+
+    env = gym.make('CartPole-v0')
     agent = Agent(obs_dim=env.observation_space.shape[0], acts_dim=env.action_space.n, agent_config=agent_config,
                   train_config=train_config)
     # plotter = PlotMachine(agent=agent, v_min=agent_config['v_min'], v_max=agent_config['v_max'],
     #                       nb_atoms=agent_config['nb_atoms'],
     #                       n_actions=env.action_space.n, action_set=None)
 
-    ob_filter = lambda x: x  # ZFilter(shape=env.observation_space.shape)
-    warmup(env=env, ob_filter=ob_filter)
-
-    # load_model(sess = agent.sess, load_path='logs')
+    logger = Logger(log_dir='logs', var_list=agent.target._params, verbose=False, max_steps=None)
     ep = 0
     total_steps = 0
-    printer = PrintMachine(train_config['summary_freq'])
-    writer = create_writer(logdir='logs/stats/')
-    saver = create_saver(var_list=agent.target._params)
-    printer.restart()
-    while ep < train_config['max_ep']:
-        ep += 1
-        done = False
-        ob = env.reset()
-        ep_rw = 0
-        while not done:
-            ob = ob_filter(ob)
+    # printer = PrintMachine(train_config['summary_freq'])
+    # printer.restart()
+    try:
 
-            act = agent.step(obs=[ob], schedule=total_steps)
-            ob1, r, done, _ = env.step(action=act)
-            # TODO : shoud the filter be applied here?
-            agent.memory.add(step=(ob, act, r, ob_filter(ob1), float(done)))
-            ob = ob1.copy()
-            ep_rw += r
-            total_steps += 1
-        if total_steps % train_config['train_freq'] == 0:
-            batch = agent.memory.sample(batch_size=train_config['batch_size'])
-            loss, feed_dict = agent.train(*batch)
-        if printer.is_up_reset():
-            env.print_stats(epsilon=agent.eps,
-                            extra='EP {}, total steps {}, loss {}, rw {}'.format(ep, total_steps,
-                                                                                 loss, ep_rw))
-            writer.add_summary(env.ep_summary, global_step=global_step)
-            writer.flush()
+        while ep < train_config['max_ep']:
+            ep += 1
+            done = False
+            ep_rw = 0
+            ob = env.reset()
+            while not done:
+                # env.render()
+
+                act = agent.step(obs=[ob], schedule=total_steps)
+                ob1, r, done, _ = env.step(action=act)
+                agent.memory.add(step=(ob, act, r, ob1, float(done)))
+                ob = ob1.copy()
+                ep_rw += r
+                total_steps += 1
+
+            batch, idxs_ws = agent.sample(batch_size=train_config['batch_size'], t=total_steps)
+            loss, feed_dict = agent.train(*batch, idxs_and_ws=idxs_ws)
             # plotter.plot_dist(obs=[ob])
-        if total_steps % train_config['summary_freq'] == 0:
-            train_stats, global_step = agent.get_train_summary(feed_dict)
-            writer.add_summary(train_stats, global_step)
-            writer.flush()
-        if total_steps % train_config['update_target_freq'] == 0:
-            agent.update_target()
 
-        if total_steps % train_config['save_freq'] == 0:
-            saver.save(sess=agent.sess, save_path='logs/ckpt/model.ckpt', write_meta_graph=False)
+            if ep % train_config['update_target_freq'] == 0:
+                agent.update_target()
+            if ep % train_config['summary_freq'] == 0:
+                summary, global_step = agent.get_train_summary(feed_dict=feed_dict)
+                # ep_stats = env.print_stats()
+                ep_stats = {
+                    'loss': loss,
+                    'agent_eps': agent.eps,
+                    'ep_rw': ep_rw,
+                    'total_ep': ep,
+                    'total_steps': total_steps
+                }
+                logger.dump(stats=ep_stats, tf_summary=summary, global_step=total_steps)
+                logger.log(ep_stats)
+            if ep % train_config['save_freq'] == 0:
+                logger.save_model(sess=agent.sess, global_step=total_steps)
+    except KeyboardInterrupt:
+        logger.save_model(sess = agent.sess, global_step=total_steps)
+        agent.close()
+        print('Closing experiment. File saved at {}'.format(logger.save_path))
 
 
 if __name__ == '__main__':

@@ -67,9 +67,10 @@ class DQN(object):
             else:
                 for idx, size in enumerate(units):
                     h = fc(x=h, h_size=size, act=act, name='h_{}'.format(idx))
-
+                    # h = noisy_dense(x = h, h_size=size, act = act, name = 'h_{}'.format(idx))
             with tf.variable_scope('p_dist'):
-                logits = fc(x=h, h_size=acts_dim * nb_atoms, act=None, name='logits')
+                logits = fc(x=h, h_size=acts_dim *  nb_atoms, act=act, name='logits')
+                # logits = noisy_dense(x=h, h_size=acts_dim * nb_atoms, act=None, name='logits')
                 logits = tf.reshape(logits, shape=(-1, acts_dim, nb_atoms))
                 self.p = tf.nn.softmax(logits, dim=-1)
 
@@ -103,6 +104,12 @@ class DQN(object):
 def summary_op(t_list):
     ops = []
     for t in t_list:
-        op = tf.summary.tensor_summary(name=t.name.split(':')[0], tensor=t)
+        name = t.name.replace(':', '_')
+        if t.get_shape().ndims<1:
+            op  =tf.summary.scalar(name = name, tensor=t)
+        else:
+            op = tf.summary.histogram(name = name, values = t)
+        # op = tf.summary.tensor_summary(name=t.name.split(':')[0], tensor=t)
         ops.append(op)
     return tf.summary.merge(ops)
+

@@ -1,4 +1,3 @@
-import csv
 import datetime
 import queue
 import random
@@ -13,7 +12,8 @@ from gym import spaces
 from gym.utils import seeding
 
 from commons.disk_utils import disk_cache
-from commons.tf_utils import get_summary
+
+# from commons.tf_utils import get_summary
 
 VERY_SMALL_NUMBER = 0.01
 
@@ -138,7 +138,6 @@ class BitEnv(gym.Env):
         self.sim_ep_timestep_bound = max_timesteps
         self.initial_budget = initial_budget
         self.liquid_budget = initial_budget
-        self.ep_summary = get_summary()
         # max_loss = .20
         # max_gain = .50
         # self.is_greedy = (max_loss, max_gain)
@@ -306,7 +305,7 @@ class BitEnv(gym.Env):
         delta_cash = agent_value - self.initial_budget
         market_return = (sell - self.initial_price) / self.initial_price
         ep_return = delta_cash / self.initial_budget
-        step = datetime.datetime.utcnow().strftime("%d-%m-%H-%M-%S")
+        # step = datetime.datetime.utcnow().strftime("%d-%m-%H-%M-%S")
         ep_stats = OrderedDict(
             btc_price=sell,
             epsilon=epsilon,
@@ -321,29 +320,31 @@ class BitEnv(gym.Env):
             trade_volume=self.taken_actions[MarketActions.BUY] - self.taken_actions[MarketActions.SELL],
             adv_over_keep_policy=delta_cash + self.initial_budget - (self.initial_budget / self.S[0][0]) * sell,
         )
-        progress = round(self.sim_time / float(len(self.S)), 6)
 
-        print("\n===== Progress {} =====".format(progress))
-        for k, v in ep_stats.items():
-            # it's easy to ask forgiveness than permission
-            try:
-                self.ep_summary.value.add(tag=v, simple_value=k)
-                print("{}: {:.3f}".format(k, v))
-            except TypeError:
-                print("{}: {}".format(k, v))
-        with open(self._logger_path, 'a') as fout:
-            writer = csv.DictWriter(fout, fieldnames=list(ep_stats.keys()) + ['step'])
-            if self._write_head == True:
-                writer.writeheader()
-                self._write_head = False
-            ep_stats['step'] = step
-            writer.writerow(ep_stats)
+        # progress = round(self.sim_time / float(len(self.S)), 6)
+        #
+        # print("\n===== Progress {} =====".format(progress))
+        # for k, v in ep_stats.items():
+        #     it's easy to ask forgiveness than permission
+            # try:
+            #     self.ep_summary.value.add(tag=v, simple_value=k)
+            #     print("{}: {:.3f}".format(k, v))
+            # except TypeError:
+            #     print("{}: {}".format(k, v))
+        # with open(self._logger_path, 'a') as fout:
+        #     writer = csv.DictWriter(fout, fieldnames=list(ep_stats.keys()) + ['step'])
+        #     if self._write_head == True:
+        #         writer.writeheader()
+        #         self._write_head = False
+        #     ep_stats['step'] = step
+        #     writer.writerow(ep_stats)
 
         self.taken_actions = {
             MarketActions.SELL: 0,
             MarketActions.BUY: 0,
             MarketActions.KEEP: 0,
         }
+        return ep_stats
 
         # import tensorflow as tf
         # ep_summary = tf.summary.Summary()

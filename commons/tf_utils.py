@@ -73,6 +73,13 @@ def save(saver, sess, save_path):
         tf.logging.error(e)
 
 
+def create_writer(logdir):
+    return tf.summary.FileWriter(logdir=logdir)
+
+
+# def get_summary():
+#     return tf.summary.Summary()
+
 def fc(x, h_size, name, reuse=False, act=None, std=0.1):
     with tf.variable_scope(name, reuse=reuse):
         input_size = x.get_shape()[1]
@@ -159,9 +166,30 @@ def conv1d(obs, seq_len=100, obs_dim=5, kernel_sizes=None, output_channels=None)
     return h
 
 
-def create_writer(logdir):
-    return tf.summary.FileWriter(logdir=logdir)
 
+def noisy_dense(x, h_size, name, reuse = False, act=None, bias = False):
+    d = x.get_shape().as_list()[1]
 
-def get_summary():
-    return tf.summary.Summary()
+    mu_0 = tf.random_uniform_initializer(minval=- 1 * 1 / np.power(d, .5), maxval=1 / np.power(d, .5))
+    sigma_0 = tf.constant_initializer(.4 / np.power(d, .5))
+
+    p = tf.random_normal([d, 1])
+    q = tf.random_normal([1, h_size])
+    f_p = tf.multiply(tf.sign(p), tf.pow(tf.abs(p), .5))
+    f_q = tf.multiply(tf.sign(q), tf.pow(tf.abs(q), .5))
+
+    w_eps = f_p * f_q
+    b_eps = tf.squeeze(f_q)
+
+    with tf.variable_scope(name, reuse=reuse):
+        w_mu = tf.get_variable('{}/w_mu'.format(name), shape=[d, h_size], initializer=mu_0)
+        w_sigma = tf.get_variable('{}/w_sigma'.format(name), shape=[d, h_size], initializer=sigma_0)
+        w = w_mu + tf.multiply(w_sigma, w_eps)
+
+        b_mu = tf.get_variable('{}/b_mu'.format(name), shape=[h_size], initializer=mu_0)
+        b_sigma = tf.get_variable('{}/b_sigma'.format(name), shape=[h_size], initializer=sigma_0)
+        b = b_mu + tf.multiply(b_sigma, b_eps)
+        z = tf.matmul(x, w) + b
+    if act is not None:
+        z = act(z)
+    return z

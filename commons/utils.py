@@ -1,6 +1,8 @@
-import numpy as np
 import time
+
 import matplotlib.pyplot as plt
+import numpy as np
+
 from commons.tf_utils import build_z
 
 
@@ -53,3 +55,13 @@ class PrintMachine(object):
         if is_up:
             self.restart()
         return is_up
+
+
+def warmup(env, ob_filter, steps=1000):
+    from numpy.random import randint
+    ob = env.reset()
+    for _ in range(steps):
+        ob = ob_filter(ob)
+        ob, _, done, _ = env.step(randint(0, env.action_space.n))
+        if done:
+            ob = env.reset()
