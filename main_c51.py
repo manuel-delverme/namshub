@@ -28,9 +28,9 @@ agent_config = {
 train_config = {
     # 'env_name': 'CartPole-v0',
     'max_ep': np.inf,  # int(1e5),
-    'max_steps': 1e5 * 10,
-    'summary_freq': 1,
-    'save_freq': 5,
+    'max_steps': 1e6 * 10,
+    'summary_freq': 100,
+    'save_freq': 5000,
     'update_target_freq': 5,
     'train_freq': 1,
     'num_cpu': 1,
@@ -97,16 +97,16 @@ def main():
                 agent.update_target()
             if ep % train_config['summary_freq'] == 0:
                 summary, global_step = agent.get_train_summary(feed_dict=feed_dict)
-                # ep_stats = env.print_stats()
-                ep_stats = {
-                    'loss': loss,
-                    'agent_eps': agent.eps,
-                    'ep_rw': ep_rw,
-                    'total_ep': ep,
-                    'total_steps': total_steps
-                }
+                ep_stats = env.print_stats(epsilon=agent.eps)
+                # ep_stats = {
+                #     'loss': loss,
+                #     'agent_eps': agent.eps,
+                #     'ep_rw': ep_rw,
+                #     'total_ep': ep,
+                #     'total_steps': total_steps
+                # }
+                logger.log(ep_stats, total_ep=ep)
                 logger.dump(stats=ep_stats, tf_summary=summary, global_step=total_steps)
-                logger.log(ep_stats)
             if ep % train_config['save_freq'] == 0:
                 logger.save_model(sess=agent.sess, global_step=total_steps)
     except KeyboardInterrupt:

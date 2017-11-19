@@ -37,12 +37,13 @@ class Logger(object):
         self.writer.writeheader()
         self.write_header = False
 
-    def log(self, stats):
-        print("===== Ep {} ====".format(stats['total_ep']))
+    def log(self, stats, total_ep):
+        print("===== Ep {} ====".format(total_ep))
+        # TODO: Fix me in one line with tqdm progress
         for k, v in stats.items():
             try:
-                print("{}:{}".format(k, round(v, 3)))
                 self.ep_summary.value.add(tag=k, simple_value=v)
+                print("{}:{}".format(k, round(v, 3)))
             except TypeError:
                 print("{}: {}".format(k, v))
         print('\n')
@@ -77,7 +78,7 @@ class Logger(object):
     def save_model(self, sess, global_step=None):
         try:
             self.tf_saver.save(
-                sess, save_path=self.save_path +'/model.ckpt', global_step=global_step,
+                sess, save_path=self.save_path + '/model.ckpt', global_step=global_step,
                 write_meta_graph=False
             )
         except Exception as e:
