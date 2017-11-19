@@ -165,8 +165,8 @@ class BitEnv(gym.Env):
 
         self._seed()
         self.short_term_history = queue.deque(maxlen=history_length)
-        self.medium_term_history = queue.deque(maxlen=history_length)
-        self.long_term_history = queue.deque(maxlen=history_length)
+        # self.medium_term_history = queue.deque(maxlen=history_length)
+        # self.long_term_history = queue.deque(maxlen=history_length)
         # TODO don't think this should be here
         first_market_observation = self.query_market_history(obs_time=0)
         for _ in range(history_length):
@@ -176,6 +176,7 @@ class BitEnv(gym.Env):
 
         self.observation = self._reset()
         obs_dim = self.observation.shape[0]
+        # ... why is infinity?
         self.observation_space = spaces.Box(
             low=np.array([-np.inf] * obs_dim),
             high=np.array([np.inf] * obs_dim),
@@ -200,7 +201,7 @@ class BitEnv(gym.Env):
         self.taken_actions[action] += 1
 
         penalty = 0
-        new_price = self.S[self.sim_time][Observations.SELL]
+        new_price = self.S[self.sim_time][0]
         transaction_fee = self.bitcoin_fraction * (0.16 / 100)
 
         can_buy_btc = self.liquid_budget > (new_price * self.bitcoin_fraction + transaction_fee)
@@ -238,7 +239,7 @@ class BitEnv(gym.Env):
             agent_value = (self.liquid_budget - self.initial_budget) / self.initial_budget
         else:
             current_value = self.liquid_budget - self.invested_budget * new_price
-            agent_value = ((current_value) - self.initial_budget) / self.initial_budget
+            agent_value = (current_value - self.initial_budget) / self.initial_budget
             # I want to be able to manage risk profile using bonuses or..goals :)
             # if portfolio_value > self.max_gain:
             #     bonus = 10
@@ -278,18 +279,19 @@ class BitEnv(gym.Env):
 
     def _preprocess_state(self):
         observation = self.query_market_history(self.sim_time)
-        self.short_term_history.append(np.array(observation))
-
-        short_term_obs = np.array(self.short_term_history)
-        past_obs = []
-        for idx in range(5):
-            past_obs.append(self.query_market_history(self.sim_time - 1000 - idx))
-        for idx in range(5):
-            past_obs.append(self.query_market_history(self.sim_time - 10000 - idx))
-
-        observation = np.vstack((short_term_obs, past_obs)).flatten()
-        observation = np.append(observation, (self.invested_budget, self.liquid_budget))
-        return observation
+        # self.short_term_history.append(np.array(observation))
+        #
+        # short_term_obs = np.array(self.short_term_history)
+        # past_obs = []
+        # for idx in range(5):
+        #     past_obs.append(self.query_market_history(self.sim_time - 1000 - idx))
+        # for idx in range(5):
+        #     past_obs.append(self.query_market_history(self.sim_time - 10000 - idx))
+        #
+        # observation = np.vstack((short_term_obs, past_obs)).flatten()
+        # observation = np.append(observation, (self.invested_budget, self.liquid_budget))
+        self.short_term_history.append(observation)
+        return np.array(self.short_term_history).flatten()
 
     def query_market_history(self, obs_time):
         obs_time = max(obs_time, 0)

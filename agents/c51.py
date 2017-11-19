@@ -59,8 +59,10 @@ class Agent(object):
     def get_p(self, obs):
         return self.sess.run(self.local.p, feed_dict={self.local.obs: obs})[0]
 
+
     def sample(self, batch_size, t):
-        return self.memory.sample(batch_size, self.beta_scheduler.value(t))
+        #self.beta_scheduler.value(t)
+        return self.memory.sample(batch_size,None)
 
     def train(self, obs, acts, rws, obs1, dones, idxs_and_ws):
         # TODO this should be done inside the TF graph....

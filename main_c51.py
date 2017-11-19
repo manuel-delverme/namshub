@@ -2,6 +2,7 @@ import numpy as np
 import tensorflow as tf
 
 from agents.c51 import Agent
+from bit_env.BitEnv import BitEnv
 from commons.logger import Logger
 
 # from commons.running_stats import ZFilter
@@ -9,7 +10,7 @@ from commons.logger import Logger
 tf.logging.set_verbosity(tf.logging.INFO)
 network_config = {
     'units': (64, 32, 64),
-    'topology': 'fc',  # 'fc',  # conv
+    'topology': 'conv',  # 'fc',  # conv
     'act': tf.nn.relu,
     'lr': 1e-3,
     'max_clip': 40.
@@ -17,7 +18,7 @@ network_config = {
 }
 
 agent_config = {
-    'gamma': 0.95,
+    'gamma': 0.99,
     'v_min': -20.,
     'v_max': +20.,
     'nb_atoms': 51,
@@ -39,7 +40,7 @@ train_config = {
     'final_eps': .01,
     'alpha_replay': .6,  # define the importance of the priority of the memory
     'beta_replay': .4,
-    'use_replay': True
+    'use_replay': False
 }
 
 env_config = {
@@ -51,15 +52,15 @@ env_config = {
     'initial_budget': 1000,
     'history_length': 100,
     'use_historic_data': True,
-    'verbose': True,
+    'verbose': False,
 }
 
 
 def main():
-    # env = bit_env.BitEnv.BitEnv(**env_config)
-    import gym
-
-    env = gym.make('CartPole-v0')
+    env = BitEnv(**env_config)
+    # import gym
+    #
+    # env = gym.make('CartPole-v0')
     agent = Agent(obs_dim=env.observation_space.shape[0], acts_dim=env.action_space.n, agent_config=agent_config,
                   train_config=train_config)
     # plotter = PlotMachine(agent=agent, v_min=agent_config['v_min'], v_max=agent_config['v_max'],
@@ -109,7 +110,7 @@ def main():
             if ep % train_config['save_freq'] == 0:
                 logger.save_model(sess=agent.sess, global_step=total_steps)
     except KeyboardInterrupt:
-        logger.save_model(sess = agent.sess, global_step=total_steps)
+        logger.save_model(sess=agent.sess, global_step=total_steps)
         agent.close()
         print('Closing experiment. File saved at {}'.format(logger.save_path))
 

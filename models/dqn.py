@@ -45,25 +45,28 @@ class DQN(object):
             h = self.obs
             if topology == 'conv':
                 from commons.tf_utils import conv1d
-                agent_state = h[:, -2:]
-                market_data = h[:, :-2]
-                short_term = market_data[:, :300]
-                mid_term = market_data[:, 300:315]
-                long_term = market_data[:, 315:]
 
-                out_short = conv1d(short_term, seq_len=100, obs_dim=3, kernel_sizes=[5, 3, 1],
-                                   output_channels=[3, 2, 1])
-                out_mid = conv1d(mid_term, seq_len=5, obs_dim=3, kernel_sizes=[3, 1], output_channels=[2, 1])
-                out_long = conv1d(long_term, seq_len=5, obs_dim=3, kernel_sizes=[3, ], output_channels=[1, ])
 
-                out_state = tf.concat((out_short, out_mid, out_long), axis=1)
-                # h = fc(x=out_state, h_size=16, act=act, name='market_merge_conv')
-                h = tf.concat((out_state, agent_state), axis=1)
+                # agent_state = h[:, -2:]
+                # market_data = h[:, :-2]
+                # short_term = market_data[:, :300]
+                # mid_term = market_data[:, 300:315]
+                # long_term = market_data[:, 315:]
+                #
+                # out_short = conv1d(short_term, seq_len=100, obs_dim=3, kernel_sizes=[5, 3, 1],
+                #                    output_channels=[3, 2, 1])
+                # out_mid = conv1d(mid_term, seq_len=5, obs_dim=3, kernel_sizes=[3, 1], output_channels=[2, 1])
+                # out_long = conv1d(long_term, seq_len=5, obs_dim=3, kernel_sizes=[3, ], output_channels=[1, ])
+                #
+                # out_state = tf.concat((out_short, out_mid, out_long), axis=1)
+                # # h = fc(x=out_state, h_size=16, act=act, name='market_merge_conv')
+                # h = tf.concat((out_state, agent_state), axis=1)
+                #
+                # # #STACKMORELAYERS
+                # # h = fc(x=h, h_size=128, act=tf.nn.relu, name='layers_just_because_more_layers')
 
-                # #STACKMORELAYERS
-                # h = fc(x=h, h_size=128, act=tf.nn.relu, name='layers_just_because_more_layers')
-
-                h = fc(x=h, h_size=2, act=tf.nn.relu, name='merge_layer_conv')
+                # h = fc(x=h, h_size=2, act=tf.nn.relu, name='merge_layer_conv')
+                h = conv1d(obs = h,seq_len=100, obs_dim=3)
             else:
                 for idx, size in enumerate(units):
                     h = fc(x=h, h_size=size, act=act, name='h_{}'.format(idx))
